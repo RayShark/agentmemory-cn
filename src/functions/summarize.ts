@@ -8,9 +8,9 @@ import type {
 import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import {
-  SUMMARY_SYSTEM,
+  buildSummarySystem,
   buildSummaryPrompt,
-  REDUCE_SYSTEM,
+  buildReduceSystem,
   buildReducePrompt,
 } from "../prompts/summary.js";
 import { getXmlTag, getXmlChildren } from "../prompts/xml.js";
@@ -20,6 +20,7 @@ import { scoreSummary } from "../eval/quality.js";
 import type { MetricsStore } from "../eval/metrics-store.js";
 import { safeAudit } from "./audit.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
 
 // Per-chunk observation budget when a session is too large to fit in one
 // LLM call. Default ≈ 50k input tokens per chunk at ~110 tok/obs — fits
@@ -68,7 +69,7 @@ async function summarizeChunkWithRetry(
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const xml = await provider.summarize(
-        SUMMARY_SYSTEM,
+        buildSummarySystem(getLocale()),
         buildSummaryPrompt(chunk),
       );
       const parsed = parseSummaryXml(xml, sessionId, project, chunk.length);
@@ -109,7 +110,7 @@ async function produceSummaryXml(
   const chunkSize = getChunkSize();
   if (compressed.length <= chunkSize) {
     const response = await provider.summarize(
-      SUMMARY_SYSTEM,
+      buildSummarySystem(getLocale()),
       buildSummaryPrompt(compressed),
     );
     return { response, mode: "single", chunks: 1 };
@@ -178,7 +179,7 @@ async function produceSummaryXml(
     };
   });
   const response = await provider.summarize(
-    REDUCE_SYSTEM,
+    buildReduceSystem(getLocale()),
     buildReducePrompt(reduceInput),
   );
   return { response, mode: "chunked", chunks: chunks.length, skipped };

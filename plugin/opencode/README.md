@@ -27,7 +27,25 @@ npx @agentmemory/agentmemory
 
 The server starts on `http://localhost:3111`.
 
-### 2. Configure the MCP server
+### 2. Connect OpenCode
+
+```bash
+agentmemory connect opencode
+```
+
+This writes the global OpenCode config at `~/.config/opencode/opencode.json`, copies `plugin/opencode/agentmemory-capture.ts` into `~/.config/opencode/plugins/`, and copies the bundled slash commands into `~/.config/opencode/commands/`.
+
+Set `AGENTMEMORY_LOCALE=zh-CN` before running connect to install the Simplified Chinese command bodies from `plugin/opencode/commands.zh-CN/`:
+
+```bash
+AGENTMEMORY_LOCALE=zh-CN agentmemory connect opencode
+```
+
+Use `--dry-run` to preview without writing files, and `--force` to overwrite existing agentmemory OpenCode config/command assets.
+
+Codex and Claude plugin manifests are static files, so they cannot switch `skills` between `plugin/skills/` and `plugin/skills.zh-CN/` at runtime. Their default manifests keep pointing at English skills and note that zh-CN skill assets are bundled separately.
+
+### 3. Manual MCP config
 
 Add to `~/.config/opencode/opencode.json` or your project's `.opencode/opencode.json`:
 
@@ -43,7 +61,7 @@ Add to `~/.config/opencode/opencode.json` or your project's `.opencode/opencode.
 }
 ```
 
-### 3. Install the plugin
+### 4. Manual plugin install
 
 Add to `~/.config/opencode/opencode.json`:
 
@@ -60,7 +78,7 @@ mkdir -p ~/.config/opencode/plugins
 cp plugin/opencode/agentmemory-capture.ts ~/.config/opencode/plugins/
 ```
 
-### 4. Add the slash commands
+### 5. Manual slash commands
 
 Copy the commands into your project or global `.opencode/commands/` directory:
 
@@ -69,6 +87,8 @@ mkdir -p ~/.config/opencode/commands
 cp plugin/opencode/commands/recall.md ~/.config/opencode/commands/
 cp plugin/opencode/commands/remember.md ~/.config/opencode/commands/
 ```
+
+For Simplified Chinese command bodies, copy from `plugin/opencode/commands.zh-CN/` instead.
 
 Restart OpenCode or open a new session. The plugin auto-captures everything.
 

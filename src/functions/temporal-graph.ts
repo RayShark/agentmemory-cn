@@ -7,11 +7,13 @@ import type {
   TemporalState,
   MemoryProvider,
 } from "../types.js";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 import { KV, generateId } from "../state/schema.js";
 import type { StateKV } from "../state/kv.js";
 import { logger } from "../logger.js";
 
-const TEMPORAL_EXTRACTION_SYSTEM = `You are a temporal knowledge extraction engine. Given observations, extract entities AND their temporal relationships with full context metadata.
+const TEMPORAL_EXTRACTION_SYSTEM_BASE = `You are a temporal knowledge extraction engine. Given observations, extract entities AND their temporal relationships with full context metadata.
 
 For each relationship, you MUST provide:
 1. Semantic relation type
@@ -44,6 +46,15 @@ Rules:
 - Extract temporal validity from context clues ("since last month", "in 2024", "currently")
 - Capture reasoning/motivation behind each relationship
 - Weight relationships by directness: 1.0 = explicit statement, 0.5 = inferred, 0.1 = speculative`;
+
+export function buildTemporalExtractionSystem(
+  locale: Locale = getLocale(),
+): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${TEMPORAL_EXTRACTION_SYSTEM_BASE}\n\n${instruction}`
+    : TEMPORAL_EXTRACTION_SYSTEM_BASE;
+}
 
 function parseTemporalGraphXml(
   xml: string,
@@ -170,17 +181,18 @@ export function registerTemporalGraphFunctions(
         return { success: false, error: "No observations provided" };
       }
 
+      const locale = getLocale();
       const items = data.observations
         .map(
           (o, i) =>
-            `[${i + 1}] Type: ${o.type}\nTimestamp: ${o.timestamp}\nTitle: ${o.title}\nNarrative: ${o.narrative}\nConcepts: ${(o.concepts ?? []).join(", ")}\nFiles: ${(o.files ?? []).join(", ")}`,
+            `[${i + 1}] ${t(locale, "promptInput.type")}: ${o.type}\n${t(locale, "promptInput.timestamp")}: ${o.timestamp}\n${t(locale, "promptInput.title")}: ${o.title}\n${t(locale, "promptInput.narrative")}: ${o.narrative}\n${t(locale, "promptInput.concepts")}: ${(o.concepts ?? []).join(", ")}\n${t(locale, "promptInput.files")}: ${(o.files ?? []).join(", ")}`,
         )
         .join("\n\n");
 
       try {
         const response = await provider.compress(
-          TEMPORAL_EXTRACTION_SYSTEM,
-          `Extract temporal knowledge graph from:\n\n${items}`,
+          buildTemporalExtractionSystem(locale),
+          `${t(locale, "promptInput.extractTemporalGraph")}:\n\n${items}`,
         );
 
         const obsIds = data.observations.map((o) => o.id);

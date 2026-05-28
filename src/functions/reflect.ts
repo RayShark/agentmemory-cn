@@ -11,7 +11,8 @@ import type {
   MemoryProvider,
 } from "../types.js";
 import { recordAudit } from "./audit.js";
-import { REFLECT_SYSTEM, buildReflectPrompt } from "../prompts/reflect.js";
+import { buildReflectPrompt, buildReflectSystem } from "../prompts/reflect.js";
+import { getLocale } from "../config.js";
 
 interface ConceptCluster {
   concepts: string[];
@@ -254,8 +255,12 @@ export function registerReflectFunctions(
         };
 
         try {
-          const prompt = buildReflectPrompt(cluster);
-          const response = await provider.summarize(REFLECT_SYSTEM, prompt);
+          const locale = getLocale();
+          const prompt = buildReflectPrompt(cluster, locale);
+          const response = await provider.summarize(
+            buildReflectSystem(locale),
+            prompt,
+          );
 
           const insightRegex =
             /<insight\s+confidence="([^"]+)"\s+title="([^"]+)">([\s\S]*?)<\/insight>/g;

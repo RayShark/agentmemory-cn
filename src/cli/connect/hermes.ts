@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
+import { currentCliLocale, cliTFor } from "../i18n.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 
 const HERMES_DIR = join(homedir(), ".hermes");
@@ -19,25 +20,15 @@ export const adapter: ConnectAdapter = {
     return existsSync(HERMES_DIR);
   },
 
-  async install(_opts: ConnectOptions): Promise<ConnectResult> {
-    p.log.warn(
-      "Hermes uses YAML config. Automated merge isn't implemented yet — manual install required.",
-    );
+  async install(opts: ConnectOptions): Promise<ConnectResult> {
+    const locale = opts.locale ?? currentCliLocale();
+    p.log.warn(cliTFor(locale, "connect.hermes.warn"));
     p.note(
-      [
-        `Add to ${HERMES_CONFIG}:`,
-        "",
-        "  mcp_servers:",
-        "    agentmemory:",
-        "      command: npx",
-        '      args: ["-y", "@agentmemory/mcp"]',
-        "",
-        "  memory:",
-        "    provider: agentmemory",
-        "",
-        `Full guide: ${DOCS}`,
-      ].join("\n"),
-      "Hermes manual install",
+      cliTFor(locale, "connect.hermes.note", {
+        config: HERMES_CONFIG,
+        docs: DOCS,
+      }),
+      cliTFor(locale, "connect.hermes.title"),
     );
     return {
       kind: "stub",

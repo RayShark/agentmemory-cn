@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import * as p from "@clack/prompts";
+import { currentCliLocale, cliTFor } from "../i18n.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 import {
   AGENTMEMORY_MCP_BLOCK,
@@ -51,6 +52,7 @@ export function createJsonMcpAdapter(
     },
 
     async install(opts: ConnectOptions): Promise<ConnectResult> {
+      const locale = opts.locale ?? currentCliLocale();
       const existing = readJsonSafe<McpConfig>(config.configPath);
       const next: McpConfig = existing ? { ...existing } : {};
       const servers: Record<string, McpEntry> = {
@@ -59,13 +61,19 @@ export function createJsonMcpAdapter(
 
       const alreadyHas = entryMatches(servers["agentmemory"]);
       if (alreadyHas && !opts.force) {
-        logAlreadyWired(config.displayName, config.configPath);
+        logAlreadyWired(config.displayName, config.configPath, locale);
         return { kind: "already-wired", mutatedPath: config.configPath };
       }
 
       if (opts.dryRun) {
         p.log.info(
-          `[dry-run] Would ${alreadyHas ? "overwrite" : "add"} mcpServers.agentmemory in ${config.configPath}`,
+          cliTFor(
+            locale,
+            alreadyHas
+              ? "connect.jsonMcp.dryRunOverwrite"
+              : "connect.jsonMcp.dryRunAdd",
+            { path: config.configPath },
+          ),
         );
         return { kind: "installed", mutatedPath: config.configPath };
       }
@@ -73,7 +81,7 @@ export function createJsonMcpAdapter(
       let backupPath: string | undefined;
       if (existsSync(config.configPath)) {
         backupPath = backupFile(config.configPath, config.name);
-        logBackup(backupPath);
+        logBackup(backupPath, locale);
       } else {
         mkdirSync(dirname(config.configPath), { recursive: true });
       }
@@ -85,12 +93,14 @@ export function createJsonMcpAdapter(
       const verify = readJsonSafe<McpConfig>(config.configPath);
       if (!entryMatches(verify?.mcpServers?.["agentmemory"])) {
         p.log.error(
-          `Verification failed: ${config.configPath} did not contain mcpServers.agentmemory after write.`,
+          cliTFor(locale, "connect.jsonMcp.verificationFailed", {
+            path: config.configPath,
+          }),
         );
         return { kind: "skipped", reason: "verification-failed" };
       }
 
-      logInstalled(config.displayName, config.configPath);
+      logInstalled(config.displayName, config.configPath, locale);
       return {
         kind: "installed",
         mutatedPath: config.configPath,

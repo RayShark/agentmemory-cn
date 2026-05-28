@@ -9,13 +9,17 @@ import type {
 import { KV, generateId } from "../state/schema.js";
 import type { StateKV } from "../state/kv.js";
 import {
-  SEMANTIC_MERGE_SYSTEM,
+  buildSemanticMergeSystem,
   buildSemanticMergePrompt,
-  PROCEDURAL_EXTRACTION_SYSTEM,
+  buildProceduralExtractionSystem,
   buildProceduralExtractionPrompt,
 } from "../prompts/consolidation.js";
 import { recordAudit } from "./audit.js";
-import { getConsolidationDecayDays, isConsolidationEnabled } from "../config.js";
+import {
+  getConsolidationDecayDays,
+  getLocale,
+  isConsolidationEnabled,
+} from "../config.js";
 import { logger } from "../logger.js";
 
 function applyDecay(
@@ -79,7 +83,7 @@ export function registerConsolidationPipelineFunction(
 
           try {
             const response = await provider.summarize(
-              SEMANTIC_MERGE_SYSTEM,
+              buildSemanticMergeSystem(getLocale()),
               prompt,
             );
 
@@ -162,7 +166,7 @@ export function registerConsolidationPipelineFunction(
 
           try {
             const response = await provider.summarize(
-              PROCEDURAL_EXTRACTION_SYSTEM,
+              buildProceduralExtractionSystem(getLocale()),
               prompt,
             );
 

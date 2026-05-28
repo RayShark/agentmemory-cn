@@ -5,20 +5,20 @@ import { StateKV } from "../state/kv.js";
 import { withKeyedLock } from "../state/keyed-mutex.js";
 import { recordAudit } from "./audit.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
+import { t, type Locale } from "../i18n/index.js";
 
 type SlotScope = "project" | "global";
+type DefaultSlot = Omit<MemorySlot, "createdAt" | "updatedAt">;
+type DefaultSlotTemplate = Omit<DefaultSlot, "description">;
 
 const DEFAULT_SIZE_LIMIT = 2000;
 
-export const DEFAULT_SLOTS: ReadonlyArray<
-  Omit<MemorySlot, "createdAt" | "updatedAt">
-> = [
+const DEFAULT_SLOT_TEMPLATES = [
   {
     label: "persona",
     content: "",
     sizeLimit: 1000,
-    description:
-      "How the agent should see itself: role, tone, behavioural guidelines.",
     pinned: true,
     readOnly: false,
     scope: "global",
@@ -27,8 +27,6 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "user_preferences",
     content: "",
     sizeLimit: 2000,
-    description:
-      "Coding style, tool preferences, naming conventions, and other habits the user wants preserved across sessions.",
     pinned: true,
     readOnly: false,
     scope: "global",
@@ -37,8 +35,6 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "tool_guidelines",
     content: "",
     sizeLimit: 1500,
-    description:
-      "Rules the agent should follow when picking or sequencing tools (e.g. prefer X over Y, never run Z without confirmation).",
     pinned: true,
     readOnly: false,
     scope: "global",
@@ -47,8 +43,6 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "project_context",
     content: "",
     sizeLimit: 3000,
-    description:
-      "Architecture decisions, codebase conventions, build/test commands, and cross-cutting constraints for the current project.",
     pinned: true,
     readOnly: false,
     scope: "project",
@@ -57,8 +51,6 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "guidance",
     content: "",
     sizeLimit: 1500,
-    description:
-      "Active advice for the next session: what to focus on, what to avoid, open risks.",
     pinned: true,
     readOnly: false,
     scope: "project",
@@ -67,8 +59,6 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "pending_items",
     content: "",
     sizeLimit: 2000,
-    description:
-      "Unfinished work, explicit TODOs, and promises made but not yet delivered.",
     pinned: true,
     readOnly: false,
     scope: "project",
@@ -77,8 +67,6 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "session_patterns",
     content: "",
     sizeLimit: 1500,
-    description:
-      "Recurring behaviours and common struggles observed across recent sessions.",
     pinned: false,
     readOnly: false,
     scope: "project",
@@ -87,13 +75,22 @@ export const DEFAULT_SLOTS: ReadonlyArray<
     label: "self_notes",
     content: "",
     sizeLimit: 1500,
-    description:
-      "Free-form notes the agent keeps for itself: hypotheses, dead ends, things to revisit.",
     pinned: false,
     readOnly: false,
     scope: "project",
   },
-];
+] as const satisfies ReadonlyArray<DefaultSlotTemplate>;
+
+export function defaultSlots(
+  locale: Locale = getLocale(),
+): ReadonlyArray<DefaultSlot> {
+  return DEFAULT_SLOT_TEMPLATES.map((slot) => ({
+    ...slot,
+    description: t(locale, `slots.defaults.${slot.label}`),
+  }));
+}
+
+export const DEFAULT_SLOTS = defaultSlots("en");
 
 export function isSlotsEnabled(): boolean {
   return process.env["AGENTMEMORY_SLOTS"] === "true";
@@ -153,7 +150,7 @@ function validateSizeLimit(raw: unknown): number | null | undefined {
 
 async function seedDefaults(kv: StateKV): Promise<void> {
   const ts = nowIso();
-  for (const tmpl of DEFAULT_SLOTS) {
+  for (const tmpl of defaultSlots(getLocale())) {
     const target = scopeKv(tmpl.scope);
     const existing = await kv.get<MemorySlot>(target, tmpl.label);
     if (existing) continue;

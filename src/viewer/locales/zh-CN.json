@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "dashboard": "仪表盘",
+    "graph": "图谱",
+    "memories": "记忆",
+    "timeline": "时间线",
+    "sessions": "会话",
+    "lessons": "经验",
+    "actions": "任务",
+    "crystals": "结晶",
+    "audit": "审计",
+    "activity": "动态",
+    "profile": "画像",
+    "replay": "回放"
+  },
+  "theme": {
+    "dark": "深色",
+    "light": "浅色"
+  },
+  "ws": {
+    "off": "实时更新已关闭"
+  },
+  "brand": {
+    "dashboardAria": "打开仪表盘"
+  },
+  "footer": {
+    "versionLoading": "加载中...",
+    "github": "GitHub",
+    "docs": "文档",
+    "feedback": "报告问题 ->"
+  },
+  "timeline": {
+    "sortOrder": "时间线排序",
+    "newestFirst": "最新优先",
+    "oldestFirst": "最早优先"
+  }
+}

@@ -10,6 +10,7 @@ import type {
 } from "../types.js";
 import { getVisibleTools } from "./tools-registry.js";
 import { timingSafeCompare } from "../auth.js";
+import { getLocale } from "../config.js";
 
 type McpResponse = {
   status_code: number;
@@ -61,7 +62,7 @@ export function registerMcpEndpoints(
     async (req: ApiRequest): Promise<McpResponse> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
-      return { status_code: 200, body: { tools: getVisibleTools() } };
+      return { status_code: 200, body: { tools: getVisibleTools(getLocale()) } };
     },
   );
   sdk.registerTrigger({

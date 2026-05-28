@@ -1,6 +1,9 @@
+import type { Locale } from "../../i18n/locale.js";
+
 export type ConnectOptions = {
   dryRun: boolean;
   force: boolean;
+  locale?: Locale;
   /**
    * When true, the Codex adapter additionally writes a global
    * `~/.codex/hooks.json` block referencing absolute paths to bundled hook

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
+import { cliTFor, currentCliLocale } from "../i18n.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 import {
   AGENTMEMORY_MCP_BLOCK,
@@ -17,6 +18,7 @@ import {
   findPluginRoot,
   type HookManifest,
 } from "./codex-hooks.js";
+import { resolvePluginManifestForLocale } from "./plugin-locale.js";
 
 const CLAUDE_DIR = join(homedir(), ".claude");
 const CLAUDE_JSON = join(homedir(), ".claude.json");
@@ -48,6 +50,22 @@ export const adapter: ConnectAdapter = {
   },
 
   async install(opts: ConnectOptions): Promise<ConnectResult> {
+    const locale = opts.locale ?? currentCliLocale();
+    const pluginManifest = resolvePluginManifestForLocale("claude", locale, {
+      write: !opts.dryRun,
+    });
+    if (pluginManifest.staged) {
+      p.log.info(
+        cliTFor(
+          locale,
+          opts.dryRun
+            ? "connect.pluginManifestDryRun"
+            : "connect.pluginManifestReady",
+          { agent: "Claude Code", path: pluginManifest.manifestPath },
+        ),
+      );
+    }
+
     const existing = readJsonSafe<ClaudeConfig>(CLAUDE_JSON);
     const next: ClaudeConfig = existing ? { ...existing } : {};
     const servers: Record<string, ClaudeMcpEntry> = {
@@ -56,7 +74,7 @@ export const adapter: ConnectAdapter = {
 
     const alreadyHas = entryMatches(servers["agentmemory"]);
     if (alreadyHas && !opts.force) {
-      logAlreadyWired("Claude Code", CLAUDE_JSON);
+      logAlreadyWired("Claude Code", CLAUDE_JSON, locale);
       // --with-hooks is independent of MCP wiring (issue #508). Run the
       // hooks fallback even when MCP is already in place so users with a
       // healthy MCP setup can still pick up version-stable hook paths.
@@ -64,7 +82,9 @@ export const adapter: ConnectAdapter = {
         const hookResult = installClaudeHooks(opts);
         if (hookResult.kind === "skipped") {
           p.log.warn(
-            `Claude Code hooks fallback skipped: ${hookResult.reason}.`,
+            cliTFor(locale, "connect.claudeCode.hooksSkipped", {
+              reason: hookResult.reason,
+            }),
           );
         }
       }
@@ -73,7 +93,13 @@ export const adapter: ConnectAdapter = {
 
     if (opts.dryRun) {
       p.log.info(
-        `[dry-run] Would ${alreadyHas ? "overwrite" : "add"} mcpServers.agentmemory in ${CLAUDE_JSON}`,
+        cliTFor(
+          locale,
+          alreadyHas
+            ? "connect.claudeCode.dryRunOverwrite"
+            : "connect.claudeCode.dryRunAdd",
+          { path: CLAUDE_JSON },
+        ),
       );
       return { kind: "installed", mutatedPath: CLAUDE_JSON };
     }
@@ -81,7 +107,7 @@ export const adapter: ConnectAdapter = {
     let backupPath: string | undefined;
     if (existsSync(CLAUDE_JSON)) {
       backupPath = backupFile(CLAUDE_JSON, "claude-code");
-      logBackup(backupPath);
+      logBackup(backupPath, locale);
     } else {
       mkdirSync(CLAUDE_DIR, { recursive: true });
       writeFileSync(CLAUDE_JSON, "{}\n", "utf-8");
@@ -94,21 +120,23 @@ export const adapter: ConnectAdapter = {
     const verify = readJsonSafe<ClaudeConfig>(CLAUDE_JSON);
     if (!entryMatches(verify?.mcpServers?.["agentmemory"])) {
       p.log.error(
-        `Verification failed: ${CLAUDE_JSON} did not contain mcpServers.agentmemory after write.`,
+        cliTFor(locale, "connect.claudeCode.verificationFailed", {
+          path: CLAUDE_JSON,
+        }),
       );
       return { kind: "skipped", reason: "verification-failed" };
     }
 
-    logInstalled("Claude Code", CLAUDE_JSON);
-    p.log.info(
-      "Restart Claude Code (or run `/mcp` inside a session) to pick up the new server.",
-    );
+    logInstalled("Claude Code", CLAUDE_JSON, locale);
+    p.log.info(cliTFor(locale, "connect.claudeCode.restart"));
 
     if (opts.withHooks) {
       const hookResult = installClaudeHooks(opts);
       if (hookResult.kind === "skipped") {
         p.log.warn(
-          `Claude Code hooks fallback skipped: ${hookResult.reason}. MCP wiring still applied.`,
+          cliTFor(locale, "connect.claudeCode.hooksSkippedMcpStillApplied", {
+            reason: hookResult.reason,
+          }),
         );
       }
     }
@@ -129,6 +157,7 @@ export const adapter: ConnectAdapter = {
  * `<pluginRoot>/scripts/`; unrelated user hook entries survive.
  */
 function installClaudeHooks(opts: ConnectOptions): ConnectResult {
+  const locale = opts.locale ?? currentCliLocale();
   let pluginRoot: string;
   try {
     pluginRoot = findPluginRoot();
@@ -148,7 +177,10 @@ function installClaudeHooks(opts: ConnectOptions): ConnectResult {
 
   if (opts.dryRun) {
     p.log.info(
-      `[dry-run] Would merge agentmemory hook entries into ${CLAUDE_SETTINGS} (${Object.keys(merged.hooks).length} event(s))`,
+      cliTFor(locale, "connect.claudeCode.hooksDryRun", {
+        path: CLAUDE_SETTINGS,
+        count: Object.keys(merged.hooks).length,
+      }),
     );
     return { kind: "installed", mutatedPath: CLAUDE_SETTINGS };
   }
@@ -156,7 +188,7 @@ function installClaudeHooks(opts: ConnectOptions): ConnectResult {
   let backupPath: string | undefined;
   if (existsSync(CLAUDE_SETTINGS)) {
     backupPath = backupFile(CLAUDE_SETTINGS, "claude-settings", "json");
-    logBackup(backupPath);
+    logBackup(backupPath, locale);
   } else {
     mkdirSync(CLAUDE_DIR, { recursive: true });
   }
@@ -164,10 +196,12 @@ function installClaudeHooks(opts: ConnectOptions): ConnectResult {
   const next: ClaudeSettings = { ...existing, hooks: merged.hooks };
   writeJsonAtomic(CLAUDE_SETTINGS, next);
 
-  logInstalled("Claude Code hooks (workaround for #508)", CLAUDE_SETTINGS);
-  p.log.info(
-    "User-scope hook entries reference absolute paths under the bundled plugin/ dir. Re-run `agentmemory connect claude-code --with-hooks` after upgrading agentmemory to refresh them.",
+  logInstalled(
+    cliTFor(locale, "connect.claudeCode.hooksInstalled"),
+    CLAUDE_SETTINGS,
+    locale,
   );
+  p.log.info(cliTFor(locale, "connect.claudeCode.hooksRefresh"));
 
   return {
     kind: "installed",

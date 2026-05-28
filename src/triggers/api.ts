@@ -19,14 +19,42 @@ import {
   detectEmbeddingProvider,
   detectLlmProviderKind,
   getAgentId,
+  getLocale,
   isAgentScopeIsolated,
 } from "../config.js";
+import { t } from "../i18n/index.js";
 
 type Response = {
   status_code: number;
   headers?: Record<string, string>;
   body: unknown;
 };
+
+function apiT(
+  key: string,
+  params: Record<string, string | number | boolean> = {},
+): string {
+  return t(getLocale(), `api.${key}`, params);
+}
+
+function apiError(
+  key: string,
+  params: Record<string, string | number | boolean> = {},
+): { error: string } {
+  return { error: apiT(`errors.${key}`, params) };
+}
+
+function apiFieldRequired(field: string): { error: string } {
+  return apiError("fieldRequired", { field });
+}
+
+function apiFieldNonEmptyString(field: string): { error: string } {
+  return apiError("fieldNonEmptyString", { field });
+}
+
+function apiFieldsRequired(fields: string): { error: string } {
+  return apiError("fieldsRequired", { fields });
+}
 
 function parseOptionalInt(raw: unknown): number | undefined {
   if (raw === undefined || raw === null || raw === "") return undefined;
@@ -44,7 +72,7 @@ function checkAuth(
     typeof auth !== "string" ||
     !timingSafeCompare(auth, `Bearer ${secret}`)
   ) {
-    return { status_code: 401, body: { error: "unauthorized" } };
+    return { status_code: 401, body: apiError("unauthorized") };
   }
   return null;
 }
@@ -56,7 +84,7 @@ function requireConfiguredSecret(
   if (secret) return null;
   return {
     status_code: 503,
-    body: { error: `${feature} requires AGENTMEMORY_SECRET` },
+    body: apiError("requiresSecret", { feature }),
   };
 }
 
@@ -74,18 +102,18 @@ function flagDisabledResponse(opts: {
 
 function graphDisabledResponse(): Response {
   return flagDisabledResponse({
-    error: "Knowledge graph not enabled",
+    error: apiT("featureDisabled.graph.error"),
     flag: "GRAPH_EXTRACTION_ENABLED",
-    enableHow: "Set GRAPH_EXTRACTION_ENABLED=true and restart. Requires an LLM provider key.",
+    enableHow: apiT("featureDisabled.graph.enableHow"),
     docsHref: "https://github.com/rohitg00/agentmemory#knowledge-graph",
   });
 }
 
 function consolidationDisabledResponse(): Response {
   return flagDisabledResponse({
-    error: "Consolidation pipeline not enabled",
+    error: apiT("featureDisabled.consolidation.error"),
     flag: "CONSOLIDATION_ENABLED",
-    enableHow: "Set CONSOLIDATION_ENABLED=true and restart. Requires an LLM provider key.",
+    enableHow: apiT("featureDisabled.consolidation.enableHow"),
     docsHref: "https://github.com/rohitg00/agentmemory#consolidation",
   });
 }
@@ -136,7 +164,7 @@ export function registerApiTriggers(
       ) {
         return {
           action: "respond",
-          response: { status_code: 401, body: { error: "unauthorized" } },
+          response: { status_code: 401, body: apiError("unauthorized") },
         };
       }
       return { action: "continue" };
@@ -161,49 +189,50 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const providerKind = detectLlmProviderKind();
       const embeddingProvider = detectEmbeddingProvider() ? "embeddings" : "none";
+      const locale = getLocale();
       const flags = [
         {
           key: "GRAPH_EXTRACTION_ENABLED",
-          label: "Knowledge graph extraction",
+          label: t(locale, "flags.GRAPH_EXTRACTION_ENABLED.label"),
           enabled: isGraphExtractionEnabled(),
           default: false,
           affects: ["Graph", "Dashboard"],
           needsLlm: true,
-          description: "Extracts entities and relations from observations into a knowledge graph.",
-          enableHow: "Set GRAPH_EXTRACTION_ENABLED=true and provide an LLM key, then restart.",
+          description: t(locale, "flags.GRAPH_EXTRACTION_ENABLED.description"),
+          enableHow: t(locale, "flags.GRAPH_EXTRACTION_ENABLED.enableHow"),
           docsHref: "https://github.com/rohitg00/agentmemory#knowledge-graph",
         },
         {
           key: "CONSOLIDATION_ENABLED",
-          label: "Memory consolidation",
+          label: t(locale, "flags.CONSOLIDATION_ENABLED.label"),
           enabled: isConsolidationEnabled(),
           default: false,
           affects: ["Dashboard", "Memories", "Crystals"],
           needsLlm: true,
-          description: "Periodically summarizes sessions into semantic facts + procedures.",
-          enableHow: "Set CONSOLIDATION_ENABLED=true and provide an LLM key, then restart.",
+          description: t(locale, "flags.CONSOLIDATION_ENABLED.description"),
+          enableHow: t(locale, "flags.CONSOLIDATION_ENABLED.enableHow"),
           docsHref: "https://github.com/rohitg00/agentmemory#consolidation",
         },
         {
           key: "AGENTMEMORY_AUTO_COMPRESS",
-          label: "LLM-powered observation compression",
+          label: t(locale, "flags.AGENTMEMORY_AUTO_COMPRESS.label"),
           enabled: isAutoCompressEnabled(),
           default: false,
           affects: ["Memories", "Timeline"],
           needsLlm: true,
-          description: "Every observation is compressed by the LLM for richer summaries (costs tokens). OFF uses zero-LLM synthetic compression.",
-          enableHow: "Set AGENTMEMORY_AUTO_COMPRESS=true and provide an LLM key.",
+          description: t(locale, "flags.AGENTMEMORY_AUTO_COMPRESS.description"),
+          enableHow: t(locale, "flags.AGENTMEMORY_AUTO_COMPRESS.enableHow"),
           docsHref: "https://github.com/rohitg00/agentmemory/issues/138",
         },
         {
           key: "AGENTMEMORY_INJECT_CONTEXT",
-          label: "In-conversation context injection",
+          label: t(locale, "flags.AGENTMEMORY_INJECT_CONTEXT.label"),
           enabled: isContextInjectionEnabled(),
           default: false,
           affects: ["Hooks"],
           needsLlm: false,
-          description: "Hooks write recalled context into Claude Code's conversation. OFF captures in the background without injecting.",
-          enableHow: "Set AGENTMEMORY_INJECT_CONTEXT=true and restart.",
+          description: t(locale, "flags.AGENTMEMORY_INJECT_CONTEXT.description"),
+          enableHow: t(locale, "flags.AGENTMEMORY_INJECT_CONTEXT.enableHow"),
           docsHref: "https://github.com/rohitg00/agentmemory/issues/143",
         },
       ];
@@ -274,10 +303,9 @@ export function registerApiTriggers(
       if (!hookType || !sessionId || !project || !cwd || !timestamp) {
         return {
           status_code: 400,
-          body: {
-            error:
-              "hookType, sessionId, project, cwd, and timestamp are required strings",
-          },
+          body: apiError("fieldsRequired", {
+            fields: "hookType, sessionId, project, cwd, and timestamp",
+          }),
         };
       }
       const payload: HookPayload = {
@@ -312,14 +340,14 @@ export function registerApiTriggers(
       if (!sessionId || !project) {
         return {
           status_code: 400,
-          body: { error: "sessionId and project are required strings" },
+          body: apiError("sessionProjectRequired"),
         };
       }
       const budget = parseOptionalPositiveInt(body.budget);
       if (budget === null) {
         return {
           status_code: 400,
-          body: { error: "budget must be a positive integer" },
+          body: apiError("positiveInteger", { field: "budget" }),
         };
       }
       const payload: { sessionId: string; project: string; budget?: number } = {
@@ -354,19 +382,19 @@ export function registerApiTriggers(
     ): Promise<Response> => {
       const body = (req.body ?? {}) as Record<string, unknown>;
       if (typeof body.query !== "string" || !body.query.trim()) {
-        return { status_code: 400, body: { error: "query is required and must be a non-empty string" } };
+        return { status_code: 400, body: apiError("queryRequiredNonEmpty") };
       }
       if (
         body.limit !== undefined &&
         (!Number.isInteger(body.limit) || (body.limit as number) < 1)
       ) {
-        return { status_code: 400, body: { error: "limit must be a positive integer" } };
+        return { status_code: 400, body: apiError("positiveInteger", { field: "limit" }) };
       }
       if (body.project !== undefined && typeof body.project !== "string") {
-        return { status_code: 400, body: { error: "project must be a string" } };
+        return { status_code: 400, body: apiError("fieldString", { field: "project" }) };
       }
       if (body.cwd !== undefined && typeof body.cwd !== "string") {
-        return { status_code: 400, body: { error: "cwd must be a string" } };
+        return { status_code: 400, body: apiError("fieldString", { field: "cwd" }) };
       }
       if (
         body.format !== undefined &&
@@ -375,7 +403,7 @@ export function registerApiTriggers(
       ) {
         return {
           status_code: 400,
-          body: { error: "format must be one of: full, compact, narrative" },
+          body: apiError("searchFormat"),
         };
       }
       if (
@@ -384,7 +412,7 @@ export function registerApiTriggers(
       ) {
         return {
           status_code: 400,
-          body: { error: "token_budget must be a positive integer" },
+          body: apiError("positiveInteger", { field: "token_budget" }),
         };
       }
       const payload = {
@@ -421,7 +449,7 @@ export function registerApiTriggers(
       if (!filePath) {
         return {
           status_code: 400,
-          body: { error: "filePath is required and must be a non-empty string" },
+          body: apiFieldNonEmptyString("filePath"),
         };
       }
       const result = await sdk.trigger({
@@ -443,7 +471,7 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const sessionId = asNonEmptyString(req.query_params?.["sessionId"]);
       if (!sessionId) {
-        return { status_code: 400, body: { error: "sessionId is required" } };
+        return { status_code: 400, body: apiFieldRequired("sessionId") };
       }
       const result = await sdk.trigger({
         function_id: "mem::replay::load",
@@ -487,7 +515,7 @@ export function registerApiTriggers(
         if (typeof body.path !== "string" || body.path.trim().length === 0) {
           return {
             status_code: 400,
-            body: { error: "path must be a non-empty string" },
+            body: apiFieldNonEmptyString("path"),
           };
         }
         payload.path = body.path.trim();
@@ -501,9 +529,11 @@ export function registerApiTriggers(
         ) {
           return {
             status_code: 400,
-            body: {
-              error: `maxFiles must be an integer between 1 and ${MAX_FILES_UPPER_BOUND}`,
-            },
+            body: apiError("integerRange", {
+              field: "maxFiles",
+              min: 1,
+              max: MAX_FILES_UPPER_BOUND,
+            }),
           };
         }
         payload.maxFiles = n;
@@ -533,7 +563,7 @@ export function registerApiTriggers(
         return {
           status_code: 400,
           body: {
-            error: "sessionId, project, and cwd are required non-empty strings",
+            error: apiT("errors.sessionProjectCwdRequired"),
           },
         };
       }
@@ -584,7 +614,7 @@ export function registerApiTriggers(
       if (!sessionId) {
         return {
           status_code: 400,
-          body: { error: "sessionId is required and must be a non-empty string" },
+          body: apiError("sessionIdRequiredNonEmpty"),
         };
       }
       await kv.update(KV.sessions, sessionId, [
@@ -608,7 +638,7 @@ export function registerApiTriggers(
     async (req: ApiRequest<{ sessionId: string }>): Promise<Response> => {
       const sessionId = asNonEmptyString((req.body as Record<string, unknown>)?.sessionId);
       if (!sessionId) {
-        return { status_code: 400, body: { error: "sessionId is required" } };
+        return { status_code: 400, body: apiError("sessionIdRequired") };
       }
       const result = await sdk.trigger({
         function_id: "mem::summarize",
@@ -634,7 +664,7 @@ export function registerApiTriggers(
       if (!sha) {
         return {
           status_code: 400,
-          body: { error: "sha is required and must be a non-empty string" },
+          body: apiFieldNonEmptyString("sha"),
         };
       }
       const sessionId = asNonEmptyString(body.sessionId) ?? undefined;
@@ -701,14 +731,14 @@ export function registerApiTriggers(
       if (!sha) {
         return {
           status_code: 400,
-          body: { error: "sha is required and must be a non-empty string" },
+          body: apiFieldNonEmptyString("sha"),
         };
       }
       const link = await kv.get<CommitLink>(KV.commits, sha);
       if (!link) {
         return {
           status_code: 404,
-          body: { error: "no sessions linked to this commit" },
+          body: apiError("commitNoLinkedSessions"),
         };
       }
       const fetched = await Promise.all(
@@ -789,7 +819,7 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const sessionId = asNonEmptyString(req.query_params?.["sessionId"]);
       if (!sessionId)
-        return { status_code: 400, body: { error: "sessionId required" } };
+        return { status_code: 400, body: apiError("sessionIdRequired") };
       const observations = await kv.list<CompressedObservation>(
         KV.observations(sessionId),
       );
@@ -852,9 +882,10 @@ export function registerApiTriggers(
       ) {
         return {
           status_code: 400,
-          body: {
-            error: "sessionId (string) and files (string[]) are required",
-          },
+          body: apiError("fieldRequiredStringAndArray", {
+            stringField: "sessionId",
+            arrayField: "files",
+          }),
         };
       }
       if (
@@ -864,7 +895,7 @@ export function registerApiTriggers(
       ) {
         return {
           status_code: 400,
-          body: { error: "terms must be an array of strings" },
+          body: apiError("fieldStringArray", { field: "terms" }),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::enrich", payload: req.body });
@@ -893,7 +924,7 @@ export function registerApiTriggers(
         typeof req.body.content !== "string" ||
         !req.body.content.trim()
       ) {
-        return { status_code: 400, body: { error: "content is required" } };
+        return { status_code: 400, body: apiFieldRequired("content") };
       }
       const result = await sdk.trigger({ function_id: "mem::remember", payload: req.body });
       return { status_code: 201, body: result };
@@ -918,7 +949,7 @@ export function registerApiTriggers(
       if (!req.body?.sessionId && !req.body?.memoryId) {
         return {
           status_code: 400,
-          body: { error: "sessionId or memoryId is required" },
+          body: apiError("oneOfRequired", { fields: "sessionId or memoryId" }),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::forget", payload: req.body });
@@ -980,7 +1011,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.dbPath || typeof req.body.dbPath !== "string") {
-        return { status_code: 400, body: { error: "dbPath is required" } };
+        return { status_code: 400, body: apiFieldRequired("dbPath") };
       }
       const result = await sdk.trigger({ function_id: "mem::migrate", payload: req.body });
       return { status_code: 200, body: result };
@@ -1020,7 +1051,7 @@ export function registerApiTriggers(
       ) {
         return {
           status_code: 400,
-          body: { error: "query or expandIds is required" },
+          body: apiError("queryOrExpandIdsRequired"),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::smart-search", payload: req.body });
@@ -1045,7 +1076,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.anchor) {
-        return { status_code: 400, body: { error: "anchor is required" } };
+        return { status_code: 400, body: apiFieldRequired("anchor") };
       }
       const result = await sdk.trigger({ function_id: "mem::timeline", payload: req.body });
       return { status_code: 200, body: result };
@@ -1065,7 +1096,7 @@ export function registerApiTriggers(
       if (!project) {
         return {
           status_code: 400,
-          body: { error: "project query param is required" },
+          body: apiError("queryParamIsRequired", { field: "project" }),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::profile", payload: { project } });
@@ -1121,7 +1152,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.exportData) {
-        return { status_code: 400, body: { error: "exportData is required" } };
+        return { status_code: 400, body: apiFieldRequired("exportData") };
       }
       const result = await sdk.trigger({ function_id: "mem::import", payload: req.body });
       return { status_code: 200, body: result };
@@ -1142,7 +1173,7 @@ export function registerApiTriggers(
       if (!req.body?.sourceId || !req.body?.targetId || !req.body?.type) {
         return {
           status_code: 400,
-          body: { error: "sourceId, targetId, and type are required" },
+          body: apiFieldsRequired("sourceId, targetId, and type"),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::relate", payload: req.body });
@@ -1168,7 +1199,7 @@ export function registerApiTriggers(
       if (!req.body?.memoryId || !req.body?.newContent) {
         return {
           status_code: 400,
-          body: { error: "memoryId and newContent are required" },
+          body: apiFieldsRequired("memoryId and newContent"),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::evolve", payload: req.body });
@@ -1207,7 +1238,7 @@ export function registerApiTriggers(
       } catch {
         return {
           status_code: 404,
-          body: { error: "Claude bridge not enabled" },
+          body: apiError("notEnabled", { feature: "Claude bridge" }),
         };
       }
     },
@@ -1228,7 +1259,7 @@ export function registerApiTriggers(
       } catch {
         return {
           status_code: 404,
-          body: { error: "Claude bridge not enabled" },
+          body: apiError("notEnabled", { feature: "Claude bridge" }),
         };
       }
     },
@@ -1295,7 +1326,7 @@ export function registerApiTriggers(
       ) {
         return {
           status_code: 400,
-          body: { error: "observations array is required" },
+          body: apiError("observationsArrayRequired"),
         };
       }
       try {
@@ -1343,14 +1374,14 @@ export function registerApiTriggers(
       if (!req.body?.itemId || !req.body?.itemType) {
         return {
           status_code: 400,
-          body: { error: "itemId and itemType are required" },
+          body: apiFieldsRequired("itemId and itemType"),
         };
       }
       try {
         const result = await sdk.trigger({ function_id: "mem::team-share", payload: req.body });
         return { status_code: 201, body: result };
       } catch {
-        return { status_code: 404, body: { error: "Team memory not enabled" } };
+        return { status_code: 404, body: apiError("notEnabled", { feature: "Team memory" }) };
       }
     },
   );
@@ -1370,7 +1401,7 @@ export function registerApiTriggers(
         const result = await sdk.trigger({ function_id: "mem::team-feed", payload: { limit } });
         return { status_code: 200, body: result };
       } catch {
-        return { status_code: 404, body: { error: "Team memory not enabled" } };
+        return { status_code: 404, body: apiError("notEnabled", { feature: "Team memory" }) };
       }
     },
   );
@@ -1388,7 +1419,7 @@ export function registerApiTriggers(
         const result = await sdk.trigger({ function_id: "mem::team-profile", payload: {} });
         return { status_code: 200, body: result };
       } catch {
-        return { status_code: 404, body: { error: "Team memory not enabled" } };
+        return { status_code: 404, body: apiError("notEnabled", { feature: "Team memory" }) };
       }
     },
   );
@@ -1425,7 +1456,7 @@ export function registerApiTriggers(
       if (!req.body?.memoryIds || !Array.isArray(req.body.memoryIds)) {
         return {
           status_code: 400,
-          body: { error: "memoryIds array is required" },
+          body: apiError("arrayRequired", { field: "memoryIds" }),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::governance-delete", payload: req.body });
@@ -1474,7 +1505,7 @@ export function registerApiTriggers(
         const result = await sdk.trigger({ function_id: "mem::snapshot-list", payload: {} });
         return { status_code: 200, body: result };
       } catch {
-        return { status_code: 404, body: { error: "Snapshots not enabled" } };
+        return { status_code: 404, body: apiError("notEnabled", { feature: "Snapshots" }) };
       }
     },
   );
@@ -1493,7 +1524,7 @@ export function registerApiTriggers(
          });
         return { status_code: 201, body: result };
       } catch {
-        return { status_code: 404, body: { error: "Snapshots not enabled" } };
+        return { status_code: 404, body: apiError("notEnabled", { feature: "Snapshots" }) };
       }
     },
   );
@@ -1508,13 +1539,13 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.commitHash) {
-        return { status_code: 400, body: { error: "commitHash is required" } };
+        return { status_code: 400, body: apiFieldRequired("commitHash") };
       }
       try {
         const result = await sdk.trigger({ function_id: "mem::snapshot-restore", payload: req.body });
         return { status_code: 200, body: result };
       } catch {
-        return { status_code: 404, body: { error: "Snapshots not enabled" } };
+        return { status_code: 404, body: apiError("notEnabled", { feature: "Snapshots" }) };
       }
     },
   );
@@ -1614,11 +1645,11 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const id = req.path_params?.["id"];
       if (!id || typeof id !== "string") {
-        return { status_code: 400, body: { error: "id path parameter is required" } };
+        return { status_code: 400, body: apiError("pathParameterRequired", { field: "id" }) };
       }
       const memory = await kv.get<import("../types.js").Memory>(KV.memories, id);
       if (!memory) {
-        return { status_code: 404, body: { error: `memory not found: ${id}` } };
+        return { status_code: 404, body: apiError("notFound", { item: `memory: ${id}` }) };
       }
       return { status_code: 200, body: { memory } };
     },
@@ -1683,12 +1714,14 @@ export function registerApiTriggers(
       if (!queryText && !queryImageRef && !queryImageBase64) {
         return {
           status_code: 400,
-          body: { error: "queryText, queryImageRef, or queryImageBase64 required" },
+          body: apiError("oneOfRequired", {
+            fields: "queryText, queryImageRef, or queryImageBase64",
+          }),
         };
       }
       const topKParsed = parseOptionalPositiveInt(body["topK"]);
       if (topKParsed === null) {
-        return { status_code: 400, body: { error: "topK must be a positive integer" } };
+        return { status_code: 400, body: apiError("positiveInteger", { field: "topK" }) };
       }
       const payload: Record<string, unknown> = {};
       if (queryText) payload["queryText"] = queryText;
@@ -1719,7 +1752,7 @@ export function registerApiTriggers(
       const sessionId = asNonEmptyString(body["sessionId"]);
       const observationId = asNonEmptyString(body["observationId"]);
       if (!imageRef) {
-        return { status_code: 400, body: { error: "imageRef is required" } };
+        return { status_code: 400, body: apiFieldRequired("imageRef") };
       }
       const payload: Record<string, unknown> = { imageRef };
       if (sessionId) payload["sessionId"] = sessionId;
@@ -1754,7 +1787,7 @@ export function registerApiTriggers(
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
     const label = asNonEmptyString(req.query_params?.["label"]);
-    if (!label) return { status_code: 400, body: { error: "label query param required" } };
+    if (!label) return { status_code: 400, body: apiError("queryParamRequired", { field: "label" }) };
     const result = await sdk.trigger({ function_id: "mem::slot-get", payload: { label } });
     const resp = result as { success?: boolean; error?: string };
     if (resp?.success === false) {
@@ -1773,30 +1806,30 @@ export function registerApiTriggers(
     if (authErr) return authErr;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const label = asNonEmptyString(body["label"]);
-    if (!label) return { status_code: 400, body: { error: "label required" } };
+    if (!label) return { status_code: 400, body: apiFieldRequired("label") };
     // Reject malformed inputs instead of silently dropping them.
     if (body["content"] !== undefined && typeof body["content"] !== "string") {
-      return { status_code: 400, body: { error: "content must be a string" } };
+      return { status_code: 400, body: apiError("fieldString", { field: "content" }) };
     }
     if (body["description"] !== undefined && typeof body["description"] !== "string") {
-      return { status_code: 400, body: { error: "description must be a string" } };
+      return { status_code: 400, body: apiError("fieldString", { field: "description" }) };
     }
     if (body["pinned"] !== undefined && typeof body["pinned"] !== "boolean") {
-      return { status_code: 400, body: { error: "pinned must be a boolean" } };
+      return { status_code: 400, body: apiError("fieldBoolean", { field: "pinned" }) };
     }
     if (
       body["scope"] !== undefined &&
       body["scope"] !== "project" &&
       body["scope"] !== "global"
     ) {
-      return { status_code: 400, body: { error: "scope must be 'project' or 'global'" } };
+      return { status_code: 400, body: apiError("fieldEnum", { field: "scope", values: "'project' or 'global'" }) };
     }
     const sizeLimit = parseOptionalPositiveInt(body["sizeLimit"]);
     if (sizeLimit === null) {
-      return { status_code: 400, body: { error: "sizeLimit must be a positive integer" } };
+      return { status_code: 400, body: apiError("positiveInteger", { field: "sizeLimit" }) };
     }
     if (sizeLimit !== undefined && sizeLimit > 20000) {
-      return { status_code: 400, body: { error: "sizeLimit must be <= 20000" } };
+      return { status_code: 400, body: apiError("fieldMax", { field: "sizeLimit", max: 20000 }) };
     }
     const payload: Record<string, unknown> = { label };
     if (typeof body["content"] === "string") payload["content"] = body["content"];
@@ -1823,7 +1856,7 @@ export function registerApiTriggers(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const label = asNonEmptyString(body["label"]);
     const text = typeof body["text"] === "string" ? body["text"] : null;
-    if (!label || !text) return { status_code: 400, body: { error: "label and text required" } };
+    if (!label || !text) return { status_code: 400, body: apiError("oneOfRequired", { fields: "label and text" }) };
     const result = await sdk.trigger({ function_id: "mem::slot-append", payload: { label, text } });
     const resp = result as { success?: boolean; error?: string };
     if (resp?.success === false) {
@@ -1846,7 +1879,7 @@ export function registerApiTriggers(
     const label = asNonEmptyString(body["label"]);
     const content = body["content"];
     if (!label || typeof content !== "string") {
-      return { status_code: 400, body: { error: "label and content (string) required" } };
+      return { status_code: 400, body: apiError("labelAndContentStringRequired") };
     }
     const result = await sdk.trigger({ function_id: "mem::slot-replace", payload: { label, content } });
     const resp = result as { success?: boolean; error?: string };
@@ -1867,7 +1900,7 @@ export function registerApiTriggers(
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
     const label = asNonEmptyString(req.query_params?.["label"]);
-    if (!label) return { status_code: 400, body: { error: "label query param required" } };
+    if (!label) return { status_code: 400, body: apiError("queryParamRequired", { field: "label" }) };
     const result = await sdk.trigger({ function_id: "mem::slot-delete", payload: { label } });
     const resp = result as { success?: boolean; error?: string };
     if (resp?.success === false) {
@@ -1886,9 +1919,9 @@ export function registerApiTriggers(
     if (authErr) return authErr;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const sessionId = asNonEmptyString(body["sessionId"]);
-    if (!sessionId) return { status_code: 400, body: { error: "sessionId required" } };
+    if (!sessionId) return { status_code: 400, body: apiFieldRequired("sessionId") };
     const maxObservations = parseOptionalPositiveInt(body["maxObservations"]);
-    if (maxObservations === null) return { status_code: 400, body: { error: "maxObservations must be a positive integer" } };
+    if (maxObservations === null) return { status_code: 400, body: apiError("positiveInteger", { field: "maxObservations" }) };
     const payload: Record<string, unknown> = { sessionId };
     if (maxObservations !== undefined) payload["maxObservations"] = maxObservations;
     const result = await sdk.trigger({ function_id: "mem::slot-reflect", payload });
@@ -1916,7 +1949,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.title) {
-        return { status_code: 400, body: { error: "title is required" } };
+        return { status_code: 400, body: apiFieldRequired("title") };
       }
       const result = await sdk.trigger({ function_id: "mem::action-create", payload: req.body });
       return { status_code: 201, body: result };
@@ -1942,7 +1975,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.actionId) {
-        return { status_code: 400, body: { error: "actionId is required" } };
+        return { status_code: 400, body: apiFieldRequired("actionId") };
       }
       const result = await sdk.trigger({ function_id: "mem::action-update", payload: req.body });
       return { status_code: 200, body: result };
@@ -1978,7 +2011,7 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const actionId = req.query_params?.["actionId"] as string;
       if (!actionId) {
-        return { status_code: 400, body: { error: "actionId required" } };
+        return { status_code: 400, body: apiFieldRequired("actionId") };
       }
       const result = await sdk.trigger({ function_id: "mem::action-get", payload: { actionId } });
       return { status_code: 200, body: result };
@@ -2001,7 +2034,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.sourceActionId || !req.body?.targetActionId || !req.body?.type) {
-        return { status_code: 400, body: { error: "sourceActionId, targetActionId, and type are required" } };
+        return { status_code: 400, body: apiFieldsRequired("sourceActionId, targetActionId, and type") };
       }
       const result = await sdk.trigger({ function_id: "mem::action-edge-create", payload: req.body });
       return { status_code: 201, body: result };
@@ -2056,7 +2089,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.actionId || !req.body?.agentId) {
-        return { status_code: 400, body: { error: "actionId and agentId are required" } };
+        return { status_code: 400, body: apiFieldsRequired("actionId and agentId") };
       }
       const result = await sdk.trigger({ function_id: "mem::lease-acquire", payload: req.body });
       return { status_code: 200, body: result };
@@ -2075,7 +2108,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.actionId || !req.body?.agentId) {
-        return { status_code: 400, body: { error: "actionId and agentId are required" } };
+        return { status_code: 400, body: apiFieldsRequired("actionId and agentId") };
       }
       const result = await sdk.trigger({ function_id: "mem::lease-release", payload: req.body });
       return { status_code: 200, body: result };
@@ -2094,7 +2127,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.actionId || !req.body?.agentId) {
-        return { status_code: 400, body: { error: "actionId and agentId are required" } };
+        return { status_code: 400, body: apiFieldsRequired("actionId and agentId") };
       }
       const result = await sdk.trigger({ function_id: "mem::lease-renew", payload: req.body });
       return { status_code: 200, body: result };
@@ -2113,7 +2146,7 @@ export function registerApiTriggers(
       if (!req.body?.name || !req.body?.steps) {
         return {
           status_code: 400,
-          body: { error: "name and steps are required" },
+          body: apiFieldsRequired("name and steps"),
         };
       }
       const result = await sdk.trigger({ function_id: "mem::routine-create", payload: req.body });
@@ -2149,7 +2182,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.routineId) {
-        return { status_code: 400, body: { error: "routineId is required" } };
+        return { status_code: 400, body: apiFieldRequired("routineId") };
       }
       const result = await sdk.trigger({ function_id: "mem::routine-run", payload: req.body });
       return { status_code: 201, body: result };
@@ -2167,7 +2200,7 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const runId = req.query_params?.["runId"] as string;
       if (!runId) {
-        return { status_code: 400, body: { error: "runId query param required" } };
+        return { status_code: 400, body: apiError("queryParamRequired", { field: "runId" }) };
       }
       const result = await sdk.trigger({ function_id: "mem::routine-status", payload: { runId } });
       return { status_code: 200, body: result };
@@ -2192,7 +2225,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.from || !req.body?.content) {
-        return { status_code: 400, body: { error: "from and content are required" } };
+        return { status_code: 400, body: apiFieldsRequired("from and content") };
       }
       const result = await sdk.trigger({ function_id: "mem::signal-send", payload: req.body });
       return { status_code: 201, body: result };
@@ -2210,7 +2243,7 @@ export function registerApiTriggers(
       if (authErr) return authErr;
       const agentId = req.query_params?.["agentId"] as string;
       if (!agentId) {
-        return { status_code: 400, body: { error: "agentId query param required" } };
+        return { status_code: 400, body: apiError("queryParamRequired", { field: "agentId" }) };
       }
       const parsedLimit = parseOptionalInt(req.query_params?.["limit"]);
       const result = await sdk.trigger({ function_id: "mem::signal-read", payload: {
@@ -2241,7 +2274,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.name) {
-        return { status_code: 400, body: { error: "name is required" } };
+        return { status_code: 400, body: apiFieldRequired("name") };
       }
       const result = await sdk.trigger({ function_id: "mem::checkpoint-create", payload: req.body });
       return { status_code: 201, body: result };
@@ -2265,7 +2298,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.checkpointId || !req.body?.status) {
-        return { status_code: 400, body: { error: "checkpointId and status are required" } };
+        return { status_code: 400, body: apiFieldsRequired("checkpointId and status") };
       }
       const result = await sdk.trigger({ function_id: "mem::checkpoint-resolve", payload: req.body });
       return { status_code: 200, body: result };
@@ -2303,7 +2336,7 @@ export function registerApiTriggers(
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
       if (!req.body?.url || !req.body?.name) {
-        return { status_code: 400, body: { error: "url and name are required" } };
+        return { status_code: 400, body: apiFieldsRequired("url and name") };
       }
       const result = await sdk.trigger({ function_id: "mem::mesh-register", payload: req.body });
       return { status_code: 201, body: result };
@@ -2375,7 +2408,7 @@ export function registerApiTriggers(
       if (since) {
         const parsed = new Date(since).getTime();
         if (Number.isNaN(parsed)) {
-          return { status_code: 400, body: { error: "Invalid 'since' date format" } };
+          return { status_code: 400, body: apiError("invalidDate", { field: "since" }) };
         }
       }
       const project = req.query_params?.["project"] as string | undefined;
@@ -2430,7 +2463,7 @@ export function registerApiTriggers(
       } catch {
         return {
           status_code: 404,
-          body: { error: "Flow compression requires a provider" },
+          body: apiError("providerRequired", { feature: "Flow compression" }),
         };
       }
     },
@@ -2520,7 +2553,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.name) return { status_code: 400, body: { error: "name is required" } };
+    if (!body?.name) return { status_code: 400, body: apiFieldRequired("name") };
     const result = await sdk.trigger({ function_id: "mem::sentinel-create", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2530,7 +2563,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.sentinelId) return { status_code: 400, body: { error: "sentinelId is required" } };
+    if (!body?.sentinelId) return { status_code: 400, body: apiFieldRequired("sentinelId") };
     const result = await sdk.trigger({ function_id: "mem::sentinel-trigger", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2548,7 +2581,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.sentinelId) return { status_code: 400, body: { error: "sentinelId is required" } };
+    if (!body?.sentinelId) return { status_code: 400, body: apiFieldRequired("sentinelId") };
     const result = await sdk.trigger({ function_id: "mem::sentinel-cancel", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2567,7 +2600,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.title) return { status_code: 400, body: { error: "title is required" } };
+    if (!body?.title) return { status_code: 400, body: apiFieldRequired("title") };
     const result = await sdk.trigger({ function_id: "mem::sketch-create", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2577,7 +2610,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.sketchId || !body?.title) return { status_code: 400, body: { error: "sketchId and title are required" } };
+    if (!body?.sketchId || !body?.title) return { status_code: 400, body: apiFieldsRequired("sketchId and title") };
     const result = await sdk.trigger({ function_id: "mem::sketch-add", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2587,7 +2620,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.sketchId) return { status_code: 400, body: { error: "sketchId is required" } };
+    if (!body?.sketchId) return { status_code: 400, body: apiFieldRequired("sketchId") };
     const result = await sdk.trigger({ function_id: "mem::sketch-promote", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2597,7 +2630,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.sketchId) return { status_code: 400, body: { error: "sketchId is required" } };
+    if (!body?.sketchId) return { status_code: 400, body: apiFieldRequired("sketchId") };
     const result = await sdk.trigger({ function_id: "mem::sketch-discard", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2624,7 +2657,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.actionIds) return { status_code: 400, body: { error: "actionIds is required" } };
+    if (!body?.actionIds) return { status_code: 400, body: apiFieldRequired("actionIds") };
     const result = await sdk.trigger({ function_id: "mem::crystallize", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2638,7 +2671,7 @@ export function registerApiTriggers(
     if (limit === null) {
       return {
         status_code: 400,
-        body: { error: "invalid numeric parameter: limit" },
+        body: apiError("invalidNumericParameter", { field: "limit" }),
       };
     }
     const result = await sdk.trigger({ function_id: "mem::crystal-list", payload: { project: params.project, sessionId: params.sessionId, limit } });
@@ -2677,7 +2710,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.targetId || !body?.dimension || !body?.value) return { status_code: 400, body: { error: "targetId, dimension, and value are required" } };
+    if (!body?.targetId || !body?.dimension || !body?.value) return { status_code: 400, body: apiFieldsRequired("targetId, dimension, and value") };
     const result = await sdk.trigger({ function_id: "mem::facet-tag", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2687,7 +2720,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.targetId || !body?.dimension) return { status_code: 400, body: { error: "targetId and dimension are required" } };
+    if (!body?.targetId || !body?.dimension) return { status_code: 400, body: apiFieldsRequired("targetId and dimension") };
     const result = await sdk.trigger({ function_id: "mem::facet-untag", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2706,7 +2739,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const params = req.query_params || {};
-    if (!params.targetId) return { status_code: 400, body: { error: "targetId query param is required" } };
+    if (!params.targetId) return { status_code: 400, body: apiError("queryParamIsRequired", { field: "targetId" }) };
     const result = await sdk.trigger({ function_id: "mem::facet-get", payload: { targetId: params.targetId } });
     return { status_code: 200, body: result };
   });
@@ -2725,7 +2758,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.id || typeof body.id !== "string") return { status_code: 400, body: { error: "id is required" } };
+    if (!body?.id || typeof body.id !== "string") return { status_code: 400, body: apiFieldRequired("id") };
     const result = await sdk.trigger({ function_id: "mem::verify", payload: { id: body.id } });
     return { status_code: 200, body: result };
   });
@@ -2736,7 +2769,7 @@ export function registerApiTriggers(
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
     if (!body?.supersededMemoryId || typeof body.supersededMemoryId !== "string") {
-      return { status_code: 400, body: { error: "supersededMemoryId is required" } };
+      return { status_code: 400, body: apiFieldRequired("supersededMemoryId") };
     }
     const result = await sdk.trigger({ function_id: "mem::cascade-update", payload: { supersededMemoryId: body.supersededMemoryId } });
     return { status_code: 200, body: result };
@@ -2747,7 +2780,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.content || typeof body.content !== "string") return { status_code: 400, body: { error: "content is required" } };
+    if (!body?.content || typeof body.content !== "string") return { status_code: 400, body: apiFieldRequired("content") };
     const tags = typeof body.tags === "string" ? (body.tags as string).split(",").map((t: string) => t.trim()).filter(Boolean) : Array.isArray(body.tags) ? body.tags : [];
     const result = (await sdk.trigger({
       function_id: "mem::lesson-save",
@@ -2773,14 +2806,14 @@ export function registerApiTriggers(
     if (minConfidence === null) {
       return {
         status_code: 400,
-        body: { error: "invalid numeric parameter: minConfidence" },
+        body: apiError("invalidNumericParameter", { field: "minConfidence" }),
       };
     }
     const limit = parseOptionalPositiveInt(params.limit);
     if (limit === null) {
       return {
         status_code: 400,
-        body: { error: "invalid numeric parameter: limit" },
+        body: apiError("invalidNumericParameter", { field: "limit" }),
       };
     }
     const result = await sdk.trigger({ function_id: "mem::lesson-list", payload: {
@@ -2797,7 +2830,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.query || typeof body.query !== "string") return { status_code: 400, body: { error: "query is required" } };
+    if (!body?.query || typeof body.query !== "string") return { status_code: 400, body: apiFieldRequired("query") };
     const result = await sdk.trigger({ function_id: "mem::lesson-recall", payload: body });
     return { status_code: 200, body: result };
   });
@@ -2807,7 +2840,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.lessonId || typeof body.lessonId !== "string") return { status_code: 400, body: { error: "lessonId is required" } };
+    if (!body?.lessonId || typeof body.lessonId !== "string") return { status_code: 400, body: apiFieldRequired("lessonId") };
     const result = await sdk.trigger({ function_id: "mem::lesson-strengthen", payload: { lessonId: body.lessonId } });
     return { status_code: 200, body: result };
   });
@@ -2821,7 +2854,7 @@ export function registerApiTriggers(
     if (!vaultDir) {
       return {
         status_code: 400,
-        body: { error: "vaultDir must be a non-empty string" },
+        body: apiFieldNonEmptyString("vaultDir"),
       };
     }
     const types = typeof body.types === "string" ? body.types.split(",").map((t: string) => t.trim()).filter(Boolean) : undefined;
@@ -2850,14 +2883,14 @@ export function registerApiTriggers(
     if (minConfidence === null) {
       return {
         status_code: 400,
-        body: { error: "invalid numeric parameter: minConfidence" },
+        body: apiError("invalidNumericParameter", { field: "minConfidence" }),
       };
     }
     const limit = parseOptionalPositiveInt(params.limit);
     if (limit === null) {
       return {
         status_code: 400,
-        body: { error: "invalid numeric parameter: limit" },
+        body: apiError("invalidNumericParameter", { field: "limit" }),
       };
     }
     const result = await sdk.trigger({ function_id: "mem::insight-list", payload: {
@@ -2873,7 +2906,7 @@ export function registerApiTriggers(
     const denied = checkAuth(req, secret);
     if (denied) return denied;
     const body = req.body as Record<string, unknown>;
-    if (!body?.query || typeof body.query !== "string") return { status_code: 400, body: { error: "query is required" } };
+    if (!body?.query || typeof body.query !== "string") return { status_code: 400, body: apiFieldRequired("query") };
     const result = await sdk.trigger({ function_id: "mem::insight-search", payload: {
       query: body.query,
       project: typeof body.project === "string" ? body.project : undefined,

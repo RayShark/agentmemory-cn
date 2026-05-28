@@ -17,6 +17,17 @@ vi.mock("../src/mcp/transport.js", () => ({
 
 vi.mock("../src/config.js", () => ({
   getStandalonePersistPath: vi.fn(() => "/tmp/test-standalone.json"),
+  getLocale: vi.fn(() => {
+    const raw = (
+      process.env["AGENTMEMORY_LOCALE"] ||
+      process.env["VIEWER_LANGUAGE"] ||
+      ""
+    )
+      .trim()
+      .replace("_", "-")
+      .toLowerCase();
+    return raw === "zh" || raw === "zh-cn" ? "zh-CN" : "en";
+  }),
 }));
 
 import {
@@ -25,7 +36,7 @@ import {
   V040_TOOLS,
 } from "../src/mcp/tools-registry.js";
 import { InMemoryKV } from "../src/mcp/in-memory-kv.js";
-import { handleToolCall } from "../src/mcp/standalone.js";
+import { handleToolCall, handleToolsList } from "../src/mcp/standalone.js";
 import {
   resetHandleForTests,
   setLivezProbe,
@@ -167,6 +178,31 @@ describe("handleToolCall", () => {
     await handleToolCall("memory_save", { content: "regression guard" }, kv);
     expect(instantLocalFallbackProbe).toHaveBeenCalledTimes(1);
     expect(fetchTrap).not.toHaveBeenCalled();
+  });
+
+  it("local fallback tool list uses AGENTMEMORY_LOCALE", async () => {
+    const originalLocale = process.env["AGENTMEMORY_LOCALE"];
+    process.env["AGENTMEMORY_LOCALE"] = "zh-CN";
+    try {
+      const result = await handleToolsList();
+      const tools = result.tools as Array<{ name: string; description: string }>;
+      const expected = new Map([
+        ["memory_save", "保存"],
+        ["memory_recall", "搜索"],
+        ["memory_smart_search", "混合"],
+        ["memory_sessions", "会话"],
+        ["memory_export", "导出"],
+        ["memory_audit", "审计"],
+        ["memory_governance_delete", "删除"],
+      ]);
+      for (const [name, text] of expected) {
+        const tool = tools.find((candidate) => candidate.name === name);
+        expect(tool?.description, name).toContain(text);
+      }
+    } finally {
+      if (originalLocale === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+      else process.env["AGENTMEMORY_LOCALE"] = originalLocale;
+    }
   });
 
   it("memory_save persists to disk immediately after saving", async () => {

@@ -9,6 +9,7 @@ import type {
   ClaudeBridgeConfig,
   TeamConfig,
 } from "./types.js";
+import { resolveLocale, type Locale } from "./i18n/index.js";
 
 function safeParseInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
@@ -182,6 +183,11 @@ function getMergedEnv(
 
 export function getEnvVar(key: string): string | undefined {
   return getMergedEnv()[key];
+}
+
+export function getLocale(): Locale {
+  const env = getMergedEnv();
+  return resolveLocale(env["AGENTMEMORY_LOCALE"] || env["VIEWER_LANGUAGE"]);
 }
 
 export function isDropStaleIndexEnabled(): boolean {

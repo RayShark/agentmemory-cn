@@ -101,7 +101,7 @@ function safeSlice(v: unknown, max: number): string {
   try { return JSON.stringify(v).slice(0, max); } catch { return ""; }
 }
 
-const AGENTMEMORY_INSTRUCTIONS = `<agentmemory-instructions>
+const AGENTMEMORY_INSTRUCTIONS_EN = `<agentmemory-instructions>
 You have access to agentmemory for persistent cross-session memory. Use these tools proactively.
 
 CORE TOOLS:
@@ -140,6 +140,60 @@ memory_consolidate — Run the 4-tier memory consolidation pipeline.
 
 All memory tools start with \`agentmemory_memory_\`. Use the exact names as they appear in your tool list. Tool results are JSON. Always check what was returned before presenting to the user.
 </agentmemory-instructions>`;
+
+const AGENTMEMORY_INSTRUCTIONS_ZH_CN = `<agentmemory-instructions>
+你可以使用 agentmemory 获得跨会话的持久记忆。请主动使用这些工具。
+
+核心工具：
+
+memory_save — 把洞察、决策或事实保存到长期记忆。
+  必填：content（文本）、concepts（2-5 个逗号分隔关键词）、type（pattern/preference/architecture/bug/workflow/fact）
+  可选：files（逗号分隔路径）
+  使用时机：用户说“记住这个”，你发现 bug，做出架构决策，或学到项目约定。
+
+memory_recall — 通过关键词搜索过去观察。
+  使用时机：用户说“回忆一下”“之前做了什么”“你还记得吗”，或需要过去会话上下文。
+
+memory_smart_search — 混合语义+关键词搜索，并支持逐步展开。
+  使用时机：需要最相关的历史上下文、模糊/概念搜索，或 recall 找不到足够信息。
+
+memory_sessions — 列出最近会话及状态、观察数量。
+  使用时机：用户询问会话或历史工作。
+
+memory_file_history — 获取特定文件的历史观察。
+  使用时机：编辑文件前想了解它的历史、常见坑或过去改动。
+
+memory_lesson_save — 保存经验教训。
+  使用时机：发现可帮助未来会话避免错误的模式。
+
+memory_lesson_recall — 按查询搜索经验，按置信度排序。
+  使用时机：做决策前检查是否有相关历史经验。
+
+memory_governance_delete — 删除指定记忆。需要用户明确确认。
+  使用时机：用户说“忘记这个”或“删除那条记忆”。
+
+memory_patterns — 检测跨会话重复模式。
+  使用时机：想理解项目级趋势。
+
+memory_consolidate — 运行 4 层记忆整合流水线。
+  使用时机：想压缩和整理积累的会话观察。
+
+所有 memory 工具都以 \`agentmemory_memory_\` 开头。请使用工具列表中的精确名称。工具结果是 JSON，向用户展示前必须先检查返回内容。
+</agentmemory-instructions>`;
+
+function resolveInstructionsLocale(): "en" | "zh-CN" {
+  const raw = (process.env.AGENTMEMORY_LOCALE || process.env.VIEWER_LANGUAGE || "")
+    .trim()
+    .replace("_", "-")
+    .toLowerCase();
+  return raw === "zh" || raw === "zh-cn" ? "zh-CN" : "en";
+}
+
+function agentmemoryInstructions(): string {
+  return resolveInstructionsLocale() === "zh-CN"
+    ? AGENTMEMORY_INSTRUCTIONS_ZH_CN
+    : AGENTMEMORY_INSTRUCTIONS_EN;
+}
 
 function extractFilePaths(args: Record<string, unknown>): string[] {
   const files: string[] = [];
@@ -604,7 +658,7 @@ export const AgentmemoryCapturePlugin: Plugin = async (ctx) => {
 
       if (!contextInjectedSessions.has(sid)) {
         if (!Array.isArray(output.system)) return;
-        output.system.push(AGENTMEMORY_INSTRUCTIONS);
+        output.system.push(agentmemoryInstructions());
         // prefer the context already fetched at session.created;
         // fall back to a fresh /context call if the cache missed (e.g.
         // session resumed across plugin reloads).

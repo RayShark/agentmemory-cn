@@ -8,6 +8,8 @@ import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import { recordAudit } from "./audit.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
+import { t } from "../i18n/index.js";
 
 export function registerProfileFunction(sdk: ISdk, kv: StateKV): void {
   sdk.registerFunction("mem::profile", 
@@ -130,28 +132,29 @@ function extractConventions(
   files: Array<{ file: string; frequency: number }>,
 ): string[] {
   const conventions: string[] = [];
+  const locale = getLocale();
 
   const tsFiles = files.filter((f) => f.file.endsWith(".ts")).length;
   const jsFiles = files.filter((f) => f.file.endsWith(".js")).length;
   if (tsFiles > jsFiles && tsFiles > 0) {
-    conventions.push("TypeScript project");
+    conventions.push(t(locale, "profile.typescriptProject"));
   }
 
   const srcFiles = files.filter((f) => f.file.includes("/src/")).length;
   if (srcFiles > files.length * 0.5) {
-    conventions.push("Standard src/ directory structure");
+    conventions.push(t(locale, "profile.standardSrc"));
   }
 
   const testFiles = files.filter(
     (f) => f.file.includes("test") || f.file.includes("spec"),
   ).length;
   if (testFiles > 0) {
-    conventions.push("Has test files");
+    conventions.push(t(locale, "profile.hasTests"));
   }
 
   for (const { concept, frequency } of concepts.slice(0, 5)) {
     if (frequency >= 3) {
-      conventions.push(`Frequently uses: ${concept}`);
+      conventions.push(t(locale, "profile.frequentlyUses", { concept }));
     }
   }
 

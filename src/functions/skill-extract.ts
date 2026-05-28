@@ -6,12 +6,14 @@ import type {
   Session,
   MemoryProvider,
 } from "../types.js";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 import { KV, generateId, fingerprintId } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import { recordAudit } from "./audit.js";
 import { logger } from "../logger.js";
 
-const SKILL_EXTRACT_SYSTEM = `You are a skill extraction engine. Given a completed multi-step task session, extract a reusable procedural skill document.
+const SKILL_EXTRACT_SYSTEM_BASE = `You are a skill extraction engine. Given a completed multi-step task session, extract a reusable procedural skill document.
 
 Output format:
 <skill>
@@ -32,9 +34,17 @@ Rules:
 - If the session is exploratory with no clear procedure, output <no-skill/>
 - Maximum 10 steps per skill`;
 
+export function buildSkillExtractSystem(locale: Locale = getLocale()): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${SKILL_EXTRACT_SYSTEM_BASE}\n\n${instruction}`
+    : SKILL_EXTRACT_SYSTEM_BASE;
+}
+
 function buildSkillPrompt(
   summary: SessionSummary,
   observations: CompressedObservation[],
+  locale: Locale = getLocale(),
 ): string {
   const obsText = observations
     .filter((o) => o.importance >= 4)
@@ -46,14 +56,14 @@ function buildSkillPrompt(
     )
     .join("\n");
 
-  return `## Session Summary
-Title: ${summary.title}
-Narrative: ${summary.narrative}
-Key Decisions: ${summary.keyDecisions.join("; ")}
-Files Modified: ${summary.filesModified.join(", ")}
-Concepts: ${summary.concepts.join(", ")}
+  return `## ${t(locale, "promptInput.sessionSummary")}
+${t(locale, "promptInput.title")}: ${summary.title}
+${t(locale, "promptInput.narrative")}: ${summary.narrative}
+${t(locale, "promptInput.keyDecisions")}: ${summary.keyDecisions.join("; ")}
+${t(locale, "promptInput.filesModified")}: ${summary.filesModified.join(", ")}
+${t(locale, "promptInput.concepts")}: ${summary.concepts.join(", ")}
 
-## Observations (${observations.length} total, showing top by importance)
+## ${t(locale, "promptInput.observationsShown", { count: observations.length })}
 ${obsText}`;
 }
 
@@ -139,9 +149,10 @@ export function registerSkillExtractFunctions(
       }
 
       try {
-        const prompt = buildSkillPrompt(summary, observations);
+        const locale = getLocale();
+        const prompt = buildSkillPrompt(summary, observations, locale);
         const response = await provider.summarize(
-          SKILL_EXTRACT_SYSTEM,
+          buildSkillExtractSystem(locale),
           prompt,
         );
         const parsed = parseSkillXml(response);

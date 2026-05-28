@@ -10,10 +10,10 @@ import type {
 import { KV, STREAM } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import {
-  COMPRESSION_SYSTEM,
+  buildCompressionSystem,
   buildCompressionPrompt,
 } from "../prompts/compression.js";
-import { VISION_DESCRIPTION_PROMPT } from "../prompts/vision.js";
+import { buildVisionDescriptionPrompt } from "../prompts/vision.js";
 import { getXmlTag, getXmlChildren } from "../prompts/xml.js";
 import { getSearchIndex, vectorIndexAddGuarded } from "./search.js";
 import { CompressOutputSchema } from "../eval/schemas.js";
@@ -22,6 +22,8 @@ import { scoreCompression } from "../eval/quality.js";
 import { compressWithRetry } from "../eval/self-correct.js";
 import type { MetricsStore } from "../eval/metrics-store.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
+import { t } from "../i18n/index.js";
 
 const VALID_TYPES = new Set<string>([
   "file_read",
@@ -77,6 +79,7 @@ export function registerCompressFunction(
       raw: RawObservation;
     }) => {
       const startMs = Date.now();
+      const locale = getLocale();
 
       let imageDescription: string | undefined;
       const hasImage = data.raw.modality === "image" || data.raw.modality === "mixed";
@@ -97,7 +100,7 @@ export function registerCompressFunction(
             else if (data.raw.imageData.endsWith(".gif")) mimeType = "image/gif";
           }
 
-          imageDescription = await provider.describeImage(base64Data, mimeType, VISION_DESCRIPTION_PROMPT);
+          imageDescription = await provider.describeImage(base64Data, mimeType, buildVisionDescriptionPrompt(locale));
           logger.info("Image described by vision model", { obsId: data.observationId });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -113,11 +116,11 @@ export function registerCompressFunction(
         toolName: data.raw.toolName,
         toolInput: data.raw.toolInput,
         toolOutput: imageDescription
-          ? `[Image Description]: ${imageDescription}\n\n${data.raw.toolOutput ?? ""}`
+          ? `[${t(locale, "promptInput.imageDescription")}]: ${imageDescription}\n\n${data.raw.toolOutput ?? ""}`
           : data.raw.toolOutput,
         userPrompt: data.raw.userPrompt,
         timestamp: data.raw.timestamp,
-      });
+      }, locale);
 
       try {
         const validator = (response: string) => {
@@ -135,7 +138,7 @@ export function registerCompressFunction(
 
         const { response, retried } = await compressWithRetry(
           provider,
-          COMPRESSION_SYSTEM,
+          buildCompressionSystem(locale),
           prompt,
           validator,
           1,

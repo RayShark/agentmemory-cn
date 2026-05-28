@@ -1,8 +1,10 @@
 import type { ISdk } from "iii-sdk";
 import type { MemoryProvider, QueryExpansion } from "../types.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 
-const QUERY_EXPANSION_SYSTEM = `You are a query expansion engine for a memory retrieval system. Given a user query, generate diverse reformulations to maximize recall.
+const QUERY_EXPANSION_SYSTEM_BASE = `You are a query expansion engine for a memory retrieval system. Given a user query, generate diverse reformulations to maximize recall.
 
 Output EXACTLY this XML:
 <expansion>
@@ -27,6 +29,13 @@ Rules:
 - If the query mentions time ("last week", "recently"), generate temporal concretizations
 - Each reformulation should capture a distinct facet of intent
 - Keep reformulations concise (under 100 chars each)`;
+
+export function buildQueryExpansionSystem(locale: Locale = getLocale()): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${QUERY_EXPANSION_SYSTEM_BASE}\n\n${instruction}`
+    : QUERY_EXPANSION_SYSTEM_BASE;
+}
 
 function parseExpansionXml(xml: string): QueryExpansion | null {
   const reformulations: string[] = [];
@@ -81,11 +90,12 @@ export function registerQueryExpansionFunction(
         ? Math.max(1, Math.min(10, Math.floor(rawMaxR)))
         : 5;
       const query = data.query.trim();
+      const locale = getLocale();
 
       try {
         const response = await provider.compress(
-          QUERY_EXPANSION_SYSTEM,
-          `Expand this query for memory retrieval:\n\n"${query}"`,
+          buildQueryExpansionSystem(locale),
+          `${t(locale, "promptInput.expandQuery")}:\n\n"${query}"`,
         );
 
         const parsed = parseExpansionXml(response);

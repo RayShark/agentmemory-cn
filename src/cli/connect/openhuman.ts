@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
+import { currentCliLocale, cliTFor } from "../i18n.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 
 const OPENHUMAN_DIR = join(homedir(), ".openhuman");
@@ -18,20 +19,12 @@ export const adapter: ConnectAdapter = {
     return existsSync(OPENHUMAN_DIR);
   },
 
-  async install(_opts: ConnectOptions): Promise<ConnectResult> {
-    p.log.warn(
-      "OpenHuman integration is not yet automated. No `integrations/openhuman/` folder exists in the agentmemory repo today.",
-    );
+  async install(opts: ConnectOptions): Promise<ConnectResult> {
+    const locale = opts.locale ?? currentCliLocale();
+    p.log.warn(cliTFor(locale, "connect.openhuman.warn"));
     p.note(
-      [
-        "OpenHuman is a Memory-trait host. The expected wiring is the REST",
-        "proxy at http://localhost:3111 plus an OpenHuman-side Memory trait",
-        "impl. Once integrations/openhuman/ lands in agentmemory we'll wire",
-        "this up automatically.",
-        "",
-        `Tracking: ${DOCS}`,
-      ].join("\n"),
-      "OpenHuman manual install",
+      cliTFor(locale, "connect.openhuman.note", { docs: DOCS }),
+      cliTFor(locale, "connect.openhuman.title"),
     );
     return {
       kind: "stub",

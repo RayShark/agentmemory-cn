@@ -1190,11 +1190,24 @@ GRAPH_EXTRACTION_ENABLED=true
 CONSOLIDATION_ENABLED=true
 ```
 
+### Language / Locale
+
+English is the default. Set `AGENTMEMORY_LOCALE=zh-CN` to localize human-facing Viewer text, core MCP tool descriptions, REST flag labels, context injection headings, replay labels, and new LLM-generated summaries/memories into Simplified Chinese:
+
+```env
+AGENTMEMORY_LOCALE=zh-CN
+```
+
+The locale does not translate API field names, REST paths, MCP tool names, XML/JSON tags, enum values, code identifiers, file paths, commands, or existing stored user content. `VIEWER_LANGUAGE` is still accepted as a deprecated Viewer-only compatibility alias when `AGENTMEMORY_LOCALE` is unset.
+
 ### Environment Variables
 
 Create `~/.agentmemory/.env`:
 
 ```env
+# Locale (optional; default en)
+# AGENTMEMORY_LOCALE=zh-CN
+
 # LLM provider (pick one — default is the no-op provider: no LLM calls)
 # ANTHROPIC_API_KEY=sk-ant-...
 # ANTHROPIC_BASE_URL=...              # Optional: Anthropic-compatible proxy / Azure

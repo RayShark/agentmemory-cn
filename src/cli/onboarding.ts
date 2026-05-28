@@ -28,6 +28,8 @@ import * as p from "@clack/prompts";
 import { writePrefs } from "./preferences.js";
 import { resolveAdapter, runAdapter } from "./connect/index.js";
 import type { ConnectResult } from "./connect/types.js";
+import { currentCliLocale, cliTFor } from "./i18n.js";
+import type { Locale } from "../i18n/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -58,28 +60,43 @@ const MCP_AGENTS: { value: string; label: string; glyph: string }[] = [
   { value: "roo", label: "Roo", glyph: "◇" },
 ];
 
-const PROVIDERS: { value: string; label: string; envKey: string | null }[] = [
-  { value: "anthropic", label: "Anthropic — claude", envKey: "ANTHROPIC_API_KEY" },
-  { value: "openai", label: "OpenAI — gpt", envKey: "OPENAI_API_KEY" },
-  { value: "gemini", label: "Google — gemini", envKey: "GEMINI_API_KEY" },
-  { value: "openrouter", label: "OpenRouter — multi-model", envKey: "OPENROUTER_API_KEY" },
-  { value: "minimax", label: "MiniMax — minimax-m1", envKey: "MINIMAX_API_KEY" },
-  { value: "skip", label: "Skip — BM25-only mode (no LLM key)", envKey: null },
+const PROVIDERS: { value: string; labelKey: string; envKey: string | null }[] = [
+  { value: "anthropic", labelKey: "providerAnthropic", envKey: "ANTHROPIC_API_KEY" },
+  { value: "openai", labelKey: "providerOpenai", envKey: "OPENAI_API_KEY" },
+  { value: "gemini", labelKey: "providerGemini", envKey: "GEMINI_API_KEY" },
+  { value: "openrouter", labelKey: "providerOpenrouter", envKey: "OPENROUTER_API_KEY" },
+  { value: "minimax", labelKey: "providerMinimax", envKey: "MINIMAX_API_KEY" },
+  { value: "skip", labelKey: "providerSkip", envKey: null },
 ];
 
-function buildAgentOptions(): { value: string; label: string; hint?: string }[] {
+function onboardingT(
+  locale: Locale,
+  key: string,
+  params: Record<string, string | number | boolean> = {},
+): string {
+  return cliTFor(locale, `onboarding.${key}`, params);
+}
+
+function buildAgentOptions(locale: Locale): { value: string; label: string; hint?: string }[] {
   return [
     ...NATIVE_AGENTS.map((a) => ({
       value: a.value,
       label: `${a.glyph} ${a.label}`,
-      hint: "native plugin",
+      hint: onboardingT(locale, "nativePluginHint"),
     })),
     ...MCP_AGENTS.map((a) => ({
       value: a.value,
       label: `${a.glyph} ${a.label}`,
-      hint: "MCP server",
+      hint: onboardingT(locale, "mcpServerHint"),
     })),
   ];
+}
+
+function buildProviderOptions(locale: Locale): { value: string; label: string }[] {
+  return PROVIDERS.map(({ value, labelKey }) => ({
+    value,
+    label: onboardingT(locale, labelKey),
+  }));
 }
 
 // Mirror src/cli.ts findEnvExample so onboarding ships the same .env
@@ -162,47 +179,33 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     return writeDefaultOnboardingPrefs();
   }
 
-  p.note(
-    [
-      "Welcome to agentmemory.",
-      "",
-      "Persistent memory for your AI coding agents. We'll pick which",
-      "agents to wire up and which provider (if any) handles compression",
-      "and consolidation. Either step can be changed later in ~/.agentmemory/.env.",
-    ].join("\n"),
-    "first-run setup",
-  );
+  const locale = currentCliLocale();
+
+  p.note(onboardingT(locale, "welcome"), onboardingT(locale, "title"));
 
   const agentsPicked = await p.multiselect<string>({
-    message: "Which agents will use agentmemory? (space to toggle, enter to confirm)",
-    options: buildAgentOptions(),
+    message: onboardingT(locale, "agentsQuestion"),
+    options: buildAgentOptions(locale),
     required: false,
     initialValues: ["claude-code"],
   });
   if (p.isCancel(agentsPicked)) {
-    p.cancel("Setup cancelled. Re-run any time with: agentmemory --reset");
+    p.cancel(onboardingT(locale, "cancelled"));
     process.exit(0);
   }
 
   const pickedAgentsList = (agentsPicked as string[]) ?? [];
   if (pickedAgentsList.length > 0) {
-    p.note(
-      [
-        "━ how this works ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "All selected agents share the same memory at :3111.",
-        "A memory saved by Claude Code is visible to Codex + Cursor instantly.",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      ].join("\n"),
-    );
+    p.note(onboardingT(locale, "howThisWorks"), onboardingT(locale, "howThisWorksTitle"));
   }
 
   const providerPicked = await p.select<string>({
-    message: "Which LLM provider should agentmemory use for compress/consolidate?",
-    options: PROVIDERS.map(({ value, label }) => ({ value, label })),
+    message: onboardingT(locale, "providerQuestion"),
+    options: buildProviderOptions(locale),
     initialValue: "anthropic",
   });
   if (p.isCancel(providerPicked)) {
-    p.cancel("Setup cancelled. Re-run any time with: agentmemory --reset");
+    p.cancel(onboardingT(locale, "cancelled"));
     process.exit(0);
   }
 
@@ -220,39 +223,39 @@ export async function runOnboarding(): Promise<OnboardingResult> {
   });
 
   const prefsLocation = join(homedir(), ".agentmemory", "preferences.json");
-  const lines = [`✓ Saved preferences to ${prefsLocation}`];
+  const lines = [`✓ ${onboardingT(locale, "savedPrefs", { path: prefsLocation })}`];
   if (envPath) {
-    lines.push(`✓ Wrote ${envPath} (edit to add your API key)`);
+    lines.push(`✓ ${onboardingT(locale, "wroteEnv", { path: envPath })}`);
   } else {
-    lines.push(`! Could not write ~/.agentmemory/.env — run \`agentmemory init\` after this completes.`);
+    lines.push(`! ${onboardingT(locale, "envWriteFailed")}`);
   }
   if (provider) {
     const envKey = PROVIDERS.find((x) => x.value === provider)?.envKey;
     if (envKey) {
-      lines.push(`  Uncomment ${envKey}= in that file to enable ${provider}.`);
+      lines.push(`  ${onboardingT(locale, "uncommentProvider", { envKey, provider })}`);
     }
   } else {
-    lines.push("  No provider chosen — agentmemory will run in BM25-only mode.");
+    lines.push(`  ${onboardingT(locale, "noProvider")}`);
   }
-  p.note(lines.join("\n"), "ready");
+  p.note(lines.join("\n"), onboardingT(locale, "readyTitle"));
 
   if (agents.length > 0) {
-    await wireSelectedAgents(agents);
+    await wireSelectedAgents(agents, locale);
   }
 
   return { agents, provider };
 }
 
-async function wireSelectedAgents(agents: string[]): Promise<void> {
-  p.note("Wire selected agents now?", "next step");
+async function wireSelectedAgents(agents: string[], locale: Locale): Promise<void> {
+  p.note(onboardingT(locale, "wireNowPrompt"), onboardingT(locale, "wireNowTitle"));
   const confirmed = await p.confirm({
-    message: "Run `agentmemory connect <agent>` for each selected agent now? [Y/n]",
+    message: onboardingT(locale, "wireNow"),
     initialValue: true,
   });
 
   if (p.isCancel(confirmed) || confirmed === false) {
     const cmds = agents.map((a) => `  agentmemory connect ${a}`);
-    p.note(["Wire later with:", ...cmds].join("\n"), "later");
+    p.note([onboardingT(locale, "wireLater"), ...cmds].join("\n"), onboardingT(locale, "wireLaterTitle"));
     return;
   }
 
@@ -263,18 +266,19 @@ async function wireSelectedAgents(agents: string[]): Promise<void> {
   for (const name of agents) {
     const adapter = resolveAdapter(name);
     if (!adapter) {
-      failed.push({ name, reason: "no adapter available" });
-      p.log.warn(`Wiring ${name}… no adapter available (skipped).`);
+      const reason = onboardingT(locale, "noAdapterReason");
+      failed.push({ name, reason });
+      p.log.warn(onboardingT(locale, "noAdapterWarning", { agent: name }));
       continue;
     }
-    p.log.step(`Wiring ${name}...`);
+    p.log.step(cliTFor(locale, "connect.wiring", { agent: name }));
     let result: ConnectResult;
     try {
-      result = await runAdapter(adapter, { dryRun: false, force: false });
+      result = await runAdapter(adapter, { dryRun: false, force: false, locale });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       failed.push({ name, reason });
-      p.log.error(`${name}: ${reason}`);
+      p.log.error(onboardingT(locale, "adapterError", { agent: name, reason }));
       continue;
     }
     switch (result.kind) {
@@ -293,20 +297,27 @@ async function wireSelectedAgents(agents: string[]): Promise<void> {
 
   const summary: string[] = [];
   if (wired.length > 0) {
-    summary.push(`Wired: ${wired.join(", ")}.`);
+    summary.push(onboardingT(locale, "wired", { agents: wired.join(", ") }));
   }
   if (manual.length > 0 || failed.length > 0) {
     const parts: string[] = [];
     for (const m of manual) {
-      parts.push(`${m.name} (manual install required${m.docs ? ` — see ${m.docs}` : ""})`);
+      parts.push(
+        onboardingT(locale, "manualInstallRequired", {
+          agent: m.name,
+          docs: m.docs
+            ? onboardingT(locale, "manualDocsSuffix", { docs: m.docs })
+            : "",
+        }),
+      );
     }
     for (const f of failed) {
-      parts.push(`${f.name} (${f.reason})`);
+      parts.push(onboardingT(locale, "failedItem", { agent: f.name, reason: f.reason }));
     }
-    summary.push(`Skipped/failed: ${parts.join(", ")}.`);
+    summary.push(onboardingT(locale, "skippedFailed", { items: parts.join(", ") }));
   }
   if (summary.length === 0) {
-    summary.push("No agents were wired.");
+    summary.push(onboardingT(locale, "noneWired"));
   }
-  p.note(summary.join("\n"), "wire summary");
+  p.note(summary.join("\n"), onboardingT(locale, "wireSummaryTitle"));
 }

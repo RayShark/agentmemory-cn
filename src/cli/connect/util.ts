@@ -9,6 +9,8 @@ import {
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import * as p from "@clack/prompts";
+import { currentCliLocale, cliTFor } from "../i18n.js";
+import type { Locale } from "../../i18n/index.js";
 
 // Env values use ${VAR:-default} expansion so the wired MCP entry
 // inherits AGENTMEMORY_URL / AGENTMEMORY_SECRET / AGENTMEMORY_TOOLS
@@ -74,14 +76,25 @@ export function writeJsonAtomic(path: string, value: unknown): void {
   renameSync(tmp, path);
 }
 
-export function logInstalled(label: string, target: string): void {
-  p.log.success(`${label} → wired into ${target}`);
+export function logInstalled(
+  label: string,
+  target: string,
+  locale: Locale = currentCliLocale(),
+): void {
+  p.log.success(cliTFor(locale, "connect.installed", { agent: label, path: target }));
 }
 
-export function logAlreadyWired(label: string, target: string): void {
-  p.log.info(`${label} already wired in ${target} (use --force to re-install)`);
+export function logAlreadyWired(
+  label: string,
+  target: string,
+  locale: Locale = currentCliLocale(),
+): void {
+  p.log.info(cliTFor(locale, "connect.alreadyWired", { agent: label, path: target }));
 }
 
-export function logBackup(target: string): void {
-  p.log.info(`Backup: ${target}`);
+export function logBackup(
+  target: string,
+  locale: Locale = currentCliLocale(),
+): void {
+  p.log.info(cliTFor(locale, "connect.backup", { path: target }));
 }

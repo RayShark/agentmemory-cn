@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { t } from "../src/i18n/index.js";
 
 const prompts = vi.hoisted(() => ({
   note: vi.fn(),
@@ -27,8 +28,12 @@ vi.mock("../src/cli/connect/index.js", () => ({
   runAdapter: vi.fn(),
 }));
 
+import { resolveAdapter, runAdapter } from "../src/cli/connect/index.js";
+
 const ORIGINAL_HOME = process.env["HOME"];
 const ORIGINAL_USERPROFILE = process.env["USERPROFILE"];
+const ORIGINAL_CI = process.env["CI"];
+const ORIGINAL_LOCALE = process.env["AGENTMEMORY_LOCALE"];
 const stdinTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 const stdoutTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
 
@@ -56,6 +61,7 @@ describe("cli onboarding", () => {
     sandboxHome = mkdtempSync(join(tmpdir(), "agentmemory-onboarding-"));
     process.env["HOME"] = sandboxHome;
     process.env["USERPROFILE"] = sandboxHome;
+    process.env["CI"] = "0";
     setTTY(false);
     vi.clearAllMocks();
   });
@@ -66,6 +72,10 @@ describe("cli onboarding", () => {
     else process.env["HOME"] = ORIGINAL_HOME;
     if (ORIGINAL_USERPROFILE === undefined) delete process.env["USERPROFILE"];
     else process.env["USERPROFILE"] = ORIGINAL_USERPROFILE;
+    if (ORIGINAL_CI === undefined) delete process.env["CI"];
+    else process.env["CI"] = ORIGINAL_CI;
+    if (ORIGINAL_LOCALE === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+    else process.env["AGENTMEMORY_LOCALE"] = ORIGINAL_LOCALE;
     rmSync(sandboxHome, { recursive: true, force: true });
   });
 
@@ -90,5 +100,74 @@ describe("cli onboarding", () => {
       skipSplash: true,
     });
     expect(typeof preferences.firstRunAt).toBe("string");
+  });
+
+  it("onboarding zh-CN text preserves command examples", () => {
+    const text = t("zh-CN", "cli.onboarding.cancelled");
+    expect(text).toMatch(/[\u3400-\u9fff]/);
+    expect(text).toContain("agentmemory --reset");
+  });
+
+  it("uses zh-CN prompts during interactive onboarding", async () => {
+    process.env["AGENTMEMORY_LOCALE"] = "zh-CN";
+    setTTY(true);
+    prompts.multiselect.mockResolvedValueOnce([]);
+    prompts.select.mockResolvedValueOnce("skip");
+
+    const { runOnboarding } = await freshOnboarding();
+    await runOnboarding();
+
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringMatching(/[\u3400-\u9fff]/),
+      expect.stringMatching(/[\u3400-\u9fff]/),
+    );
+    expect(prompts.multiselect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringMatching(/[\u3400-\u9fff]/),
+      }),
+    );
+    expect(prompts.select).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringMatching(/[\u3400-\u9fff]/),
+      }),
+    );
+    expect(
+      prompts.note.mock.calls.some((call) =>
+        String(call[0]).includes("BM25-only"),
+      ),
+    ).toBe(true);
+  });
+
+  it("passes the active locale when onboarding wires selected agents", async () => {
+    process.env["AGENTMEMORY_LOCALE"] = "zh-CN";
+    setTTY(true);
+    prompts.multiselect.mockResolvedValueOnce(["codex"]);
+    prompts.select.mockResolvedValueOnce("skip");
+    prompts.confirm.mockResolvedValueOnce(true);
+    vi.mocked(resolveAdapter).mockReturnValue({
+      name: "codex",
+      displayName: "Codex",
+      detect: () => true,
+      install: vi.fn(),
+    });
+    vi.mocked(runAdapter).mockResolvedValue({ kind: "installed" });
+
+    const { runOnboarding } = await freshOnboarding();
+    await runOnboarding();
+
+    expect(runAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "codex" }),
+      expect.objectContaining({ locale: "zh-CN" }),
+    );
+    expect(prompts.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("agentmemory connect <agent>"),
+      }),
+    );
+    expect(prompts.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringMatching(/[\u3400-\u9fff]/),
+      }),
+    );
   });
 });

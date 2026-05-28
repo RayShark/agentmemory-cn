@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import * as p from "@clack/prompts";
+import { cliTFor, currentCliLocale } from "../i18n.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 import {
   backupFile,
@@ -16,6 +17,7 @@ import {
   findPluginRoot,
   type HookManifest,
 } from "./codex-hooks.js";
+import { resolvePluginManifestForLocale } from "./plugin-locale.js";
 
 const CODEX_DIR = join(homedir(), ".codex");
 const CODEX_TOML = join(CODEX_DIR, "config.toml");
@@ -72,18 +74,38 @@ export const adapter: ConnectAdapter = {
   },
 
   async install(opts: ConnectOptions): Promise<ConnectResult> {
+    const locale = opts.locale ?? currentCliLocale();
+    const pluginManifest = resolvePluginManifestForLocale("codex", locale, {
+      write: !opts.dryRun,
+    });
+    if (pluginManifest.staged) {
+      p.log.info(
+        cliTFor(
+          locale,
+          opts.dryRun
+            ? "connect.pluginManifestDryRun"
+            : "connect.pluginManifestReady",
+          { agent: "Codex CLI", path: pluginManifest.manifestPath },
+        ),
+      );
+    }
+
     const exists = existsSync(CODEX_TOML);
     const current = exists ? readFileSync(CODEX_TOML, "utf-8") : "";
     const wired = isWiredText(current);
 
     if (wired && !opts.force) {
-      logAlreadyWired("Codex CLI", CODEX_TOML);
+      logAlreadyWired("Codex CLI", CODEX_TOML, locale);
       return { kind: "already-wired", mutatedPath: CODEX_TOML };
     }
 
     if (opts.dryRun) {
       p.log.info(
-        `[dry-run] Would ${wired ? "rewrite" : "append"} [mcp_servers.agentmemory] in ${CODEX_TOML}`,
+        cliTFor(
+          locale,
+          wired ? "connect.codex.dryRunRewrite" : "connect.codex.dryRunAppend",
+          { path: CODEX_TOML },
+        ),
       );
       if (opts.withHooks) installCodexHooks(opts);
       return { kind: "installed", mutatedPath: CODEX_TOML };
@@ -92,7 +114,7 @@ export const adapter: ConnectAdapter = {
     let backupPath: string | undefined;
     if (exists) {
       backupPath = backupFile(CODEX_TOML, "codex", "toml");
-      logBackup(backupPath);
+      logBackup(backupPath, locale);
     } else {
       mkdirSync(dirname(CODEX_TOML), { recursive: true });
     }
@@ -105,21 +127,21 @@ export const adapter: ConnectAdapter = {
     const verify = readFileSync(CODEX_TOML, "utf-8");
     if (!isWiredText(verify)) {
       p.log.error(
-        `Verification failed: ${CODEX_TOML} did not contain ${SECTION_HEADER} after write.`,
+        cliTFor(locale, "connect.codex.verificationFailed", { path: CODEX_TOML }),
       );
       return { kind: "skipped", reason: "verification-failed" };
     }
 
-    logInstalled("Codex CLI", CODEX_TOML);
-    p.log.info(
-      "Codex picks up MCP servers on next launch. For the deeper plugin install, run: codex plugin marketplace add rohitg00/agentmemory && codex plugin add agentmemory@agentmemory",
-    );
+    logInstalled("Codex CLI", CODEX_TOML, locale);
+    p.log.info(cliTFor(locale, "connect.codex.nextLaunch"));
 
     if (opts.withHooks) {
       const hookResult = installCodexHooks(opts);
       if (hookResult.kind === "skipped") {
         p.log.warn(
-          `Codex hooks fallback skipped: ${hookResult.reason}. MCP wiring still applied.`,
+          cliTFor(locale, "connect.codex.hooksSkipped", {
+            reason: hookResult.reason,
+          }),
         );
       }
     }
@@ -139,6 +161,7 @@ export const adapter: ConnectAdapter = {
  * not roll back the MCP wiring.
  */
 function installCodexHooks(opts: ConnectOptions): ConnectResult {
+  const locale = opts.locale ?? currentCliLocale();
   let pluginRoot: string;
   try {
     pluginRoot = findPluginRoot();
@@ -154,7 +177,13 @@ function installCodexHooks(opts: ConnectOptions): ConnectResult {
 
   if (opts.dryRun) {
     p.log.info(
-      `[dry-run] Would ${existing ? "merge" : "create"} ${CODEX_HOOKS} with ${Object.keys(merged.hooks).length} event(s)`,
+      cliTFor(
+        locale,
+        existing
+          ? "connect.codex.hooksDryRunMerge"
+          : "connect.codex.hooksDryRunCreate",
+        { path: CODEX_HOOKS, count: Object.keys(merged.hooks).length },
+      ),
     );
     return { kind: "installed", mutatedPath: CODEX_HOOKS };
   }
@@ -162,15 +191,17 @@ function installCodexHooks(opts: ConnectOptions): ConnectResult {
   let backupPath: string | undefined;
   if (existsSync(CODEX_HOOKS)) {
     backupPath = backupFile(CODEX_HOOKS, "codex-hooks", "json");
-    logBackup(backupPath);
+    logBackup(backupPath, locale);
   }
 
   writeJsonAtomic(CODEX_HOOKS, merged);
 
-  logInstalled("Codex hooks (workaround for openai/codex#16430)", CODEX_HOOKS);
-  p.log.info(
-    "User-scope hooks reference absolute paths under the bundled plugin/ dir. Re-run `agentmemory connect codex --with-hooks` after upgrading agentmemory to refresh them.",
+  logInstalled(
+    cliTFor(locale, "connect.codex.hooksInstalled"),
+    CODEX_HOOKS,
+    locale,
   );
+  p.log.info(cliTFor(locale, "connect.codex.hooksRefresh"));
 
   return {
     kind: "installed",

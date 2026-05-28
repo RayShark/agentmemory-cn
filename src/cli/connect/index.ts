@@ -1,5 +1,7 @@
 import { platform } from "node:os";
 import * as p from "@clack/prompts";
+import { currentCliLocale, cliTFor } from "../i18n.js";
+import type { Locale } from "../../i18n/index.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 import { adapter as antigravity } from "./antigravity.js";
 import { adapter as claudeCode } from "./claude-code.js";
@@ -8,6 +10,7 @@ import { adapter as cursor } from "./cursor.js";
 import { adapter as geminiCli } from "./gemini-cli.js";
 import { adapter as hermes } from "./hermes.js";
 import { adapter as kiro } from "./kiro.js";
+import { adapter as opencode } from "./opencode.js";
 import { adapter as openclaw } from "./openclaw.js";
 import { adapter as openhuman } from "./openhuman.js";
 import { adapter as pi } from "./pi.js";
@@ -21,6 +24,7 @@ export const ADAPTERS: readonly ConnectAdapter[] = [
   qwen,
   antigravity,
   kiro,
+  opencode,
   openclaw,
   hermes,
   pi,
@@ -62,55 +66,60 @@ export async function runAdapter(
   adapter: ConnectAdapter,
   opts: ConnectOptions,
 ): Promise<ConnectResult> {
+  const locale = opts.locale ?? currentCliLocale();
   if (!adapter.detect()) {
-    p.log.warn(
-      `${adapter.displayName}: not detected on this machine (skipping).${adapter.docs ? ` Docs: ${adapter.docs}` : ""}`,
-    );
+    const docs = adapter.docs
+      ? cliTFor(locale, "connect.docsSuffix", { docs: adapter.docs })
+      : "";
+    p.log.warn(cliTFor(locale, "connect.notDetected", { agent: adapter.displayName, docs }));
     return { kind: "skipped", reason: "not-detected" };
   }
-  p.log.step(`Wiring ${adapter.displayName}…`);
+  p.log.step(cliTFor(locale, "connect.wiring", { agent: adapter.displayName }));
   if (adapter.protocolNote) {
-    p.log.message(adapter.protocolNote);
+    p.log.message(protocolNoteFor(adapter, locale));
   }
   try {
     return await adapter.install(opts);
   } catch (err) {
-    p.log.error(
-      `${adapter.displayName}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const reason = err instanceof Error ? err.message : String(err);
+    p.log.error(cliTFor(locale, "connect.adapterError", { agent: adapter.displayName, reason }));
     return { kind: "skipped", reason: "exception" };
   }
 }
 
 export async function runConnect(args: string[]): Promise<void> {
+  const locale = currentCliLocale();
   if (platform() === "win32") {
-    p.intro("agentmemory connect");
-    p.log.warn(
-      "Windows: automated `connect` is not supported yet. See https://github.com/rohitg00/agentmemory#other-agents for manual install steps.",
-    );
-    p.outro("Windows: manual install required — see docs");
+    p.intro(cliTFor(locale, "connect.intro"));
+    p.log.warn(cliTFor(locale, "connect.windowsUnsupported"));
+    p.outro(cliTFor(locale, "connect.windowsOutro"));
     return;
   }
 
   const { dryRun, force, all, withHooks, positional } = parseFlags(args);
-  const opts: ConnectOptions = { dryRun, force, withHooks };
+  const opts: ConnectOptions = {
+    dryRun,
+    force,
+    withHooks,
+    locale,
+  };
 
-  p.intro("agentmemory connect");
+  p.intro(cliTFor(locale, "connect.intro"));
 
   if (positional.length === 0 && !all) {
     const detected = ADAPTERS.filter((a) => a.detect());
     if (detected.length === 0) {
-      p.log.error("No supported agents detected on this machine.");
-      p.outro(`Supported: ${knownAgents().join(", ")}`);
+      p.log.error(cliTFor(locale, "connect.noneDetected"));
+      p.outro(cliTFor(locale, "connect.supported", { agents: knownAgents().join(", ") }));
       process.exit(1);
     }
     const picked = await p.multiselect<string>({
-      message: "Wire agentmemory into which agents?",
+      message: cliTFor(locale, "connect.pickAgents"),
       options: detected.map((a) => ({ value: a.name, label: a.displayName })),
       required: true,
     });
     if (p.isCancel(picked)) {
-      p.cancel("Cancelled.");
+      p.cancel(cliTFor(locale, "connect.cancelled"));
       return;
     }
     const results: { name: string; result: ConnectResult }[] = [];
@@ -119,14 +128,14 @@ export async function runConnect(args: string[]): Promise<void> {
       if (!adapter) continue;
       results.push({ name, result: await runAdapter(adapter, opts) });
     }
-    summarize(results);
+    summarize(results, locale);
     return;
   }
 
   if (all) {
     const detected = ADAPTERS.filter((a) => a.detect());
     if (detected.length === 0) {
-      p.log.error("No supported agents detected on this machine.");
+      p.log.error(cliTFor(locale, "connect.noneDetected"));
       process.exit(1);
     }
     const results: { name: string; result: ConnectResult }[] = [];
@@ -136,47 +145,59 @@ export async function runConnect(args: string[]): Promise<void> {
         result: await runAdapter(adapter, opts),
       });
     }
-    summarize(results);
+    summarize(results, locale);
     return;
   }
 
   const agentName = positional[0]!;
   const adapter = resolveAdapter(agentName);
   if (!adapter) {
-    p.log.error(`Unknown agent: ${agentName}`);
-    p.outro(`Supported: ${knownAgents().join(", ")}`);
+    p.log.error(cliTFor(locale, "connect.unknownAgent", { agent: agentName }));
+    p.outro(cliTFor(locale, "connect.supported", { agents: knownAgents().join(", ") }));
     process.exit(1);
   }
 
   const result = await runAdapter(adapter, opts);
-  summarize([{ name: agentName, result }]);
+  summarize([{ name: agentName, result }], locale);
   if (result.kind === "skipped" && (result as { reason: string }).reason !== "not-detected") {
     process.exit(1);
   }
 }
 
+function protocolNoteFor(adapter: ConnectAdapter, locale: Locale): string {
+  const key = `connect.protocolNotes.${adapter.name}`;
+  const translated = cliTFor(locale, key);
+  return translated === `cli.${key}` ? adapter.protocolNote ?? "" : translated;
+}
+
 function summarize(
   results: { name: string; result: ConnectResult }[],
+  locale: Locale,
 ): void {
   const lines = results.map(({ name, result }) => {
     switch (result.kind) {
       case "installed":
-        return `  ✓ ${name}${result.mutatedPath ? ` → ${result.mutatedPath}` : ""}`;
+        return `  ✓ ${
+          result.mutatedPath
+            ? cliTFor(locale, "connect.installedLine", {
+                agent: name,
+                path: result.mutatedPath,
+              })
+            : cliTFor(locale, "connect.installedAgentLine", { agent: name })
+        }`;
       case "already-wired":
-        return `  ✓ ${name} (already wired)`;
+        return `  ✓ ${cliTFor(locale, "connect.alreadyWiredLine", { agent: name })}`;
       case "stub":
-        return `  ⚠ ${name} (manual install required: ${result.reason})`;
+        return `  ⚠ ${cliTFor(locale, "connect.manualLine", { agent: name, reason: result.reason })}`;
       case "skipped":
-        return `  ✗ ${name} (skipped: ${result.reason})`;
+        return `  ✗ ${cliTFor(locale, "connect.skippedLine", { agent: name, reason: result.reason })}`;
     }
   });
-  p.note(lines.join("\n"), "summary");
+  p.note(lines.join("\n"), cliTFor(locale, "connect.summaryTitle"));
 
   const stubs = results.filter((r) => r.result.kind === "stub");
   if (stubs.length > 0) {
-    p.log.info(
-      `${stubs.length} agent(s) require manual install — see docs links above.`,
-    );
+    p.log.info(cliTFor(locale, "connect.manualCount", { count: stubs.length }));
   }
-  p.outro("Restart any wired agent (or open a new session) to pick up agentmemory.");
+  p.outro(cliTFor(locale, "connect.restartOutro"));
 }

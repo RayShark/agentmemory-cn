@@ -23,7 +23,10 @@ describe("stop reaps the worker process (#640, #474)", () => {
     // Verify stop wiring: workerCandidates set is built from the pidfile
     // and signaled alongside the engine pids.
     expect(source).toMatch(/workerCandidates/);
-    expect(source).toMatch(/Stopping agentmemory worker/);
+    expect(source).toMatch(/stop\.stoppingWorker/);
+    expect(readFileSync("src/i18n/locales/en.json", "utf-8")).toMatch(
+      /Stopping agentmemory worker/,
+    );
   });
 
   it("both files agree on the pidfile path: ~/.agentmemory/worker.pid", () => {

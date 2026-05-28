@@ -1,4 +1,6 @@
 import type { ISdk } from "iii-sdk";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 import type { StateKV } from "../state/kv.js";
 import { KV, generateId } from "../state/schema.js";
 import type { Action, ActionEdge, Crystal, MemoryProvider } from "../types.js";
@@ -10,10 +12,17 @@ interface CrystalDigest {
   lessons: string[];
 }
 
-const CRYSTALLIZE_SYSTEM = `You are summarizing a completed chain of agent actions into a compact digest.
+const CRYSTALLIZE_SYSTEM_BASE = `You are summarizing a completed chain of agent actions into a compact digest.
 Extract: (1) what was accomplished in 1-2 sentences, (2) key decisions as bullet points,
 (3) files affected, (4) any lessons or patterns worth remembering.
 Return as JSON: { "narrative": "...", "keyOutcomes": ["..."], "filesAffected": ["..."], "lessons": ["..."] }`;
+
+export function buildCrystallizeSystem(locale: Locale = getLocale()): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${CRYSTALLIZE_SYSTEM_BASE}\n\n${instruction}`
+    : CRYSTALLIZE_SYSTEM_BASE;
+}
 
 export function registerCrystallizeFunction(
   sdk: ISdk,
@@ -51,10 +60,14 @@ export function registerCrystallizeFunction(
         (e) => idSet.has(e.sourceActionId) || idSet.has(e.targetActionId),
       );
 
-      const prompt = buildChainText(actions, relevantEdges);
+      const locale = getLocale();
+      const prompt = buildChainText(actions, relevantEdges, locale);
 
       try {
-        const response = await provider.summarize(CRYSTALLIZE_SYSTEM, prompt);
+        const response = await provider.summarize(
+          buildCrystallizeSystem(locale),
+          prompt,
+        );
         const digest = parseDigest(response);
 
         const crystal: Crystal = {
@@ -228,8 +241,12 @@ export function registerCrystallizeFunction(
   );
 }
 
-function buildChainText(actions: Action[], edges: ActionEdge[]): string {
-  const lines: string[] = ["## Completed Action Chain\n"];
+function buildChainText(
+  actions: Action[],
+  edges: ActionEdge[],
+  locale: Locale = getLocale(),
+): string {
+  const lines: string[] = [`## ${t(locale, "promptInput.completedActionChain")}\n`];
 
   const sorted = [...actions].sort(
     (a, b) =>
@@ -239,15 +256,17 @@ function buildChainText(actions: Action[], edges: ActionEdge[]): string {
   for (const action of sorted) {
     lines.push(`### ${action.title}`);
     if (action.description) lines.push(action.description);
-    if (action.result) lines.push(`Result: ${action.result}`);
+    if (action.result) {
+      lines.push(`${t(locale, "promptInput.result")}: ${action.result}`);
+    }
     lines.push(
-      `Tags: ${(action.tags ?? []).join(", ")}`,
+      `${t(locale, "promptInput.tags")}: ${(action.tags ?? []).join(", ")}`,
     );
     lines.push("");
   }
 
   if (edges.length > 0) {
-    lines.push("## Dependencies");
+    lines.push(`## ${t(locale, "promptInput.dependencies")}`);
     for (const edge of edges) {
       lines.push(
         `- ${edge.sourceActionId} --${edge.type}--> ${edge.targetActionId}`,

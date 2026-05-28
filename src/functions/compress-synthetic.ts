@@ -3,6 +3,8 @@ import type {
   CompressedObservation,
   ObservationType,
 } from "../types.js";
+import { getLocale } from "../config.js";
+import { t } from "../i18n/index.js";
 
 // Zero-LLM compression path. Converts a RawObservation into a
 // CompressedObservation using only heuristics — no Claude call, no token
@@ -73,10 +75,32 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + "\u2026" : s;
 }
 
+function fallbackTitle(hookType: string, locale: ReturnType<typeof getLocale>): string {
+  switch (hookType) {
+    case "prompt_submit":
+      return t(locale, "replay.userPrompt");
+    case "stop":
+      return t(locale, "replay.assistantResponse");
+    case "pre_tool_use":
+      return `${t(locale, "replay.toolFallback")} ${t(locale, "replay.toolCall")}`;
+    case "post_tool_use":
+      return `${t(locale, "replay.toolFallback")} ${t(locale, "replay.toolResult")}`;
+    case "post_tool_failure":
+      return `${t(locale, "replay.toolFallback")} ${t(locale, "replay.toolError")}`;
+    case "session_start":
+      return t(locale, "replay.sessionStart");
+    case "session_end":
+      return t(locale, "replay.sessionEnd");
+    default:
+      return t(locale, "synthetic.observation");
+  }
+}
+
 export function buildSyntheticCompression(
   raw: RawObservation,
 ): CompressedObservation {
-  const toolName = raw.toolName ?? raw.hookType;
+  const locale = getLocale();
+  const toolName = raw.toolName;
   const inputStr = stringifyForNarrative(raw.toolInput);
   const outputStr = stringifyForNarrative(raw.toolOutput);
   const promptStr = raw.userPrompt ?? "";
@@ -90,7 +114,7 @@ export function buildSyntheticCompression(
     sessionId: raw.sessionId,
     timestamp: raw.timestamp,
     type: inferType(toolName, raw.hookType),
-    title: truncate(toolName || "observation", 80),
+    title: truncate(toolName || fallbackTitle(raw.hookType, locale), 80),
     subtitle: inputStr ? truncate(inputStr, 120) : undefined,
     facts: [],
     narrative: truncate(narrativeParts.join(" | "), 400),

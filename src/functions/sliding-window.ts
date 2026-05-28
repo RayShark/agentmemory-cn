@@ -8,8 +8,10 @@ import { KV, generateId } from "../state/schema.js";
 import type { StateKV } from "../state/kv.js";
 import { recordAudit } from "./audit.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 
-const SLIDING_WINDOW_SYSTEM = `You are a contextual enrichment engine. Given a primary observation and its surrounding context window (previous and next observations from the same session), produce an enriched version.
+const SLIDING_WINDOW_SYSTEM_BASE = `You are a contextual enrichment engine. Given a primary observation and its surrounding context window (previous and next observations from the same session), produce an enriched version.
 
 Your tasks:
 1. ENTITY RESOLUTION: Replace all pronouns, implicit references ("that framework", "the file", "it", "he/she") with the explicit entity names found in the context window.
@@ -36,40 +38,54 @@ Rules:
 - Do not hallucinate entities not present in the window
 - Preserve factual accuracy while adding clarity`;
 
+export function buildSlidingWindowSystem(locale: Locale = getLocale()): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${SLIDING_WINDOW_SYSTEM_BASE}\n\n${instruction}`
+    : SLIDING_WINDOW_SYSTEM_BASE;
+}
+
 function buildWindowPrompt(
   primary: CompressedObservation,
   before: CompressedObservation[],
   after: CompressedObservation[],
+  locale: Locale = getLocale(),
 ): string {
   const parts: string[] = [];
 
   if (before.length > 0) {
-    parts.push("=== PRECEDING CONTEXT ===");
+    parts.push(`=== ${t(locale, "promptInput.precedingContext")} ===`);
     for (const obs of before) {
       parts.push(`[${obs.type}] ${obs.title}: ${obs.narrative}`);
-      if (obs.facts.length > 0) parts.push(`Facts: ${obs.facts.join("; ")}`);
+      if (obs.facts.length > 0) {
+        parts.push(`${t(locale, "promptInput.facts")}: ${obs.facts.join("; ")}`);
+      }
       if (obs.concepts.length > 0)
-        parts.push(`Concepts: ${obs.concepts.join(", ")}`);
+        parts.push(`${t(locale, "promptInput.concepts")}: ${obs.concepts.join(", ")}`);
     }
   }
 
-  parts.push("\n=== PRIMARY OBSERVATION (enrich this) ===");
-  parts.push(`Type: ${primary.type}`);
-  parts.push(`Title: ${primary.title}`);
-  if (primary.subtitle) parts.push(`Subtitle: ${primary.subtitle}`);
-  parts.push(`Narrative: ${primary.narrative}`);
+  parts.push(`\n=== ${t(locale, "promptInput.primaryObservation")} ===`);
+  parts.push(`${t(locale, "promptInput.type")}: ${primary.type}`);
+  parts.push(`${t(locale, "promptInput.title")}: ${primary.title}`);
+  if (primary.subtitle) {
+    parts.push(`${t(locale, "promptInput.subtitle")}: ${primary.subtitle}`);
+  }
+  parts.push(`${t(locale, "promptInput.narrative")}: ${primary.narrative}`);
   if (primary.facts.length > 0)
-    parts.push(`Facts: ${primary.facts.join("; ")}`);
+    parts.push(`${t(locale, "promptInput.facts")}: ${primary.facts.join("; ")}`);
   if (primary.concepts.length > 0)
-    parts.push(`Concepts: ${primary.concepts.join(", ")}`);
+    parts.push(`${t(locale, "promptInput.concepts")}: ${primary.concepts.join(", ")}`);
   if (primary.files.length > 0)
-    parts.push(`Files: ${primary.files.join(", ")}`);
+    parts.push(`${t(locale, "promptInput.files")}: ${primary.files.join(", ")}`);
 
   if (after.length > 0) {
-    parts.push("\n=== FOLLOWING CONTEXT ===");
+    parts.push(`\n=== ${t(locale, "promptInput.followingContext")} ===`);
     for (const obs of after) {
       parts.push(`[${obs.type}] ${obs.title}: ${obs.narrative}`);
-      if (obs.facts.length > 0) parts.push(`Facts: ${obs.facts.join("; ")}`);
+      if (obs.facts.length > 0) {
+        parts.push(`${t(locale, "promptInput.facts")}: ${obs.facts.join("; ")}`);
+      }
     }
   }
 
@@ -165,9 +181,10 @@ export function registerSlidingWindowFunction(
       }
 
       try {
-        const prompt = buildWindowPrompt(primary, before, after);
+        const locale = getLocale();
+        const prompt = buildWindowPrompt(primary, before, after, locale);
         const response = await provider.compress(
-          SLIDING_WINDOW_SYSTEM,
+          buildSlidingWindowSystem(locale),
           prompt,
         );
         const parsed = parseEnrichedXml(response);

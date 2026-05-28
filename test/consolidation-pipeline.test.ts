@@ -6,6 +6,7 @@ vi.mock("../src/logger.js", () => ({
 
 vi.mock("../src/config.js", () => ({
   getConsolidationDecayDays: () => 30,
+  getLocale: () => "en",
   isConsolidationEnabled: vi.fn(() => true),
 }));
 

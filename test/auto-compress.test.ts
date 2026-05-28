@@ -243,4 +243,25 @@ describe("buildSyntheticCompression", () => {
     });
     expect(synth.type).toBe("error");
   });
+
+  it("uses localized hook fallback titles when no tool name exists", async () => {
+    const originalLocale = process.env["AGENTMEMORY_LOCALE"];
+    process.env["AGENTMEMORY_LOCALE"] = "zh-CN";
+    try {
+      const { buildSyntheticCompression } = await import(
+        "../src/functions/compress-synthetic.js"
+      );
+      const synth = buildSyntheticCompression({
+        id: "obs_5",
+        sessionId: "ses_1",
+        timestamp: new Date().toISOString(),
+        hookType: "prompt_submit",
+        raw: {},
+      });
+      expect(synth.title).toBe("用户提示");
+    } finally {
+      if (originalLocale === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+      else process.env["AGENTMEMORY_LOCALE"] = originalLocale;
+    }
+  });
 });

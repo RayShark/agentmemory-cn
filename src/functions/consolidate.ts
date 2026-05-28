@@ -5,11 +5,13 @@ import type {
   Session,
   MemoryProvider,
 } from "../types.js";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 import { KV, generateId } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
 import { recordAudit } from "./audit.js";
 
-const CONSOLIDATION_SYSTEM = `You are a memory consolidation engine. Given a set of related observations from coding sessions, synthesize them into a single long-term memory.
+const CONSOLIDATION_SYSTEM_BASE = `You are a memory consolidation engine. Given a set of related observations from coding sessions, synthesize them into a single long-term memory.
 
 Output XML:
 <memory>
@@ -24,6 +26,13 @@ Output XML:
   </files>
   <strength>1-10 how confident/important this memory is</strength>
 </memory>`;
+
+export function buildConsolidationSystem(locale: Locale = getLocale()): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${CONSOLIDATION_SYSTEM_BASE}\n\n${instruction}`
+    : CONSOLIDATION_SYSTEM_BASE;
+}
 
 import { getXmlTag, getXmlChildren } from "../prompts/xml.js";
 import { logger } from "../logger.js";
@@ -125,6 +134,7 @@ export function registerConsolidateFunction(
 
       for (const [concept, obsGroup] of sortedGroups) {
         if (llmCallCount >= MAX_LLM_CALLS) break;
+        const locale = getLocale();
 
         const top = obsGroup
           .sort((a, b) => b.importance - a.importance)
@@ -134,15 +144,15 @@ export function registerConsolidateFunction(
         const prompt = top
           .map(
             (o) =>
-              `[${o.type}] ${o.title}\n${o.narrative}\nFiles: ${o.files.join(", ")}\nImportance: ${o.importance}`,
+              `[${o.type}] ${o.title}\n${o.narrative}\n${t(locale, "promptInput.files")}: ${o.files.join(", ")}\n${t(locale, "promptInput.importance")}: ${o.importance}`,
           )
           .join("\n\n");
 
         try {
           const response = await Promise.race([
             provider.compress(
-              CONSOLIDATION_SYSTEM,
-              `Concept: "${concept}"\n\nObservations:\n${prompt}`,
+              buildConsolidationSystem(locale),
+              `${t(locale, "promptInput.concept")}: "${concept}"\n\n${t(locale, "promptInput.observations")}:\n${prompt}`,
             ),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error("compress timeout")), 30_000),

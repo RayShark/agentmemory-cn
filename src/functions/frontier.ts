@@ -1,4 +1,6 @@
 import type { ISdk } from "iii-sdk";
+import { getLocale } from "../config.js";
+import { t } from "../i18n/index.js";
 import type { StateKV } from "../state/kv.js";
 import { KV } from "../state/schema.js";
 import type { Action, ActionEdge, Checkpoint, Lease } from "../types.js";
@@ -118,6 +120,7 @@ export function registerFrontierFunction(sdk: ISdk, kv: StateKV): void {
 
   sdk.registerFunction("mem::next", 
     async (data: { project?: string; agentId?: string }) => {
+      const locale = getLocale();
       const result = await sdk.trigger<
         { project?: string; agentId?: string; limit?: number },
         {
@@ -136,7 +139,7 @@ export function registerFrontierFunction(sdk: ISdk, kv: StateKV): void {
         return {
           success: false,
           suggestion: null,
-          message: "Failed to compute frontier",
+          message: t(locale, "actions.failedFrontier"),
           totalActions: 0,
         };
       }
@@ -144,7 +147,7 @@ export function registerFrontierFunction(sdk: ISdk, kv: StateKV): void {
         return {
           success: true,
           suggestion: null,
-          message: "No actionable work found",
+          message: t(locale, "actions.noActionableWork"),
           totalActions: result.totalActions || 0,
         };
       }
@@ -160,7 +163,11 @@ export function registerFrontierFunction(sdk: ISdk, kv: StateKV): void {
           score: top.score,
           tags: top.action.tags,
         },
-        message: `Suggested: ${top.action.title} (priority ${top.action.priority}, score ${top.score.toFixed(2)})`,
+        message: t(locale, "actions.suggested", {
+          title: top.action.title,
+          priority: top.action.priority,
+          score: top.score.toFixed(2),
+        }),
         totalActions: result.totalActions,
         totalUnblocked: result.totalUnblocked,
       };

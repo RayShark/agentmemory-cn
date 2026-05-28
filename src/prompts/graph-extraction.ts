@@ -1,4 +1,6 @@
-export const GRAPH_EXTRACTION_SYSTEM = `You are a knowledge graph extraction engine. Given a compressed observation from a coding session, extract entities and relationships.
+import { languageInstruction, type Locale } from "../i18n/index.js";
+
+const GRAPH_EXTRACTION_SYSTEM_BASE = `You are a knowledge graph extraction engine. Given a compressed observation from a coding session, extract entities and relationships.
 
 Output format (XML):
 <entities>
@@ -15,6 +17,15 @@ Rules:
 - Use the most specific type available
 - Weight relationships by how strong/direct the connection is
 - If no entities found, output empty tags`;
+
+export function buildGraphExtractionSystem(locale: Locale = "en"): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${GRAPH_EXTRACTION_SYSTEM_BASE}\n\nLanguage:\n- ${instruction}\n- Keep entity names, entity type values, relationship type values, XML attributes, and file paths exactly as observed.`
+    : GRAPH_EXTRACTION_SYSTEM_BASE;
+}
+
+export const GRAPH_EXTRACTION_SYSTEM = buildGraphExtractionSystem();
 
 export function buildGraphExtractionPrompt(
   observations: Array<{

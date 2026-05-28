@@ -16,6 +16,8 @@
 //   agentmemory doctor --all       # apply every available fix without prompting (CI)
 //   agentmemory doctor --dry-run   # show what each fix WOULD do; execute nothing
 
+import { t, type Locale } from "../i18n/index.js";
+
 export type DiagnosticStatus = {
   ok: boolean;
   /** Short status detail (one line). Shown alongside the check name. */
@@ -177,56 +179,60 @@ export type DoctorEffects = {
   clearEnginePidAndState: () => void;
 };
 
-export function buildDiagnostics(effects: DoctorEffects): Diagnostic[] {
+function dt(
+  locale: Locale,
+  key: string,
+  params: Record<string, string | number | boolean> = {},
+): string {
+  return t(locale, `cli.diagnostics.${key}`, params);
+}
+
+export function buildDiagnostics(
+  effects: DoctorEffects,
+  locale: Locale = "en",
+): Diagnostic[] {
   return [
     {
       id: "env-missing",
-      message: "~/.agentmemory/.env is missing.",
-      fixPreview: "Copy .env.example into ~/.agentmemory/.env (your keys file).",
-      moreInfo:
-        "agentmemory reads provider API keys (Anthropic, OpenAI, Gemini, …) from ~/.agentmemory/.env. " +
-        "Without this file the daemon falls back to BM25-only search and no LLM-backed enrichment runs.",
+      message: dt(locale, "envMissing.message"),
+      fixPreview: dt(locale, "envMissing.fixPreview"),
+      moreInfo: dt(locale, "envMissing.moreInfo"),
       check: async () => ({
         ok: effects.envFileExists(),
-        detail: effects.envFileExists() ? undefined : "no env file",
+        detail: effects.envFileExists() ? undefined : dt(locale, "envMissing.detail"),
       }),
       fix: () => effects.runInit(),
     },
     {
       id: "no-llm-provider-key",
-      message: "No LLM provider API key found in ~/.agentmemory/.env.",
-      fixPreview: "Open ~/.agentmemory/.env in $EDITOR and paste your key, then re-check.",
-      moreInfo:
-        "Set at least one of: ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, " +
-        "OPENROUTER_API_KEY, MINIMAX_API_KEY. The daemon picks the first that resolves " +
-        "to a real (non-placeholder) value at startup.",
+      message: dt(locale, "noLlmProviderKey.message"),
+      fixPreview: dt(locale, "noLlmProviderKey.fixPreview"),
+      moreInfo: dt(locale, "noLlmProviderKey.moreInfo"),
       check: async () => {
         if (!effects.envFileExists()) {
-          return { ok: false, detail: "env file missing (run env-missing fix first)" };
+          return { ok: false, detail: dt(locale, "noLlmProviderKey.envMissingDetail") };
         }
         const env = effects.readEnvFile();
         const real = realProviderKeys(env);
         return {
           ok: real.length > 0,
-          detail: real.length > 0 ? `found: ${real.join(", ")}` : "no provider key set",
+          detail: real.length > 0
+            ? dt(locale, "noLlmProviderKey.foundDetail", { keys: real.join(", ") })
+            : dt(locale, "noLlmProviderKey.noKeyDetail"),
         };
       },
       fix: (ctx) => effects.openEditor(ctx.envPath),
     },
     {
       id: "engine-version-mismatch",
-      message: "iii binary on PATH doesn't match the version agentmemory pins to.",
-      fixPreview:
-        "Re-run the iii installer for the pinned version and restart the engine.",
-      moreInfo:
-        "agentmemory pins the iii engine to a specific release because newer engines " +
-        "use a different worker model. Running a mismatched binary surfaces as EPIPE " +
-        "reconnect loops and empty search results.",
+      message: dt(locale, "engineVersionMismatch.message"),
+      fixPreview: dt(locale, "engineVersionMismatch.fixPreview"),
+      moreInfo: dt(locale, "engineVersionMismatch.moreInfo"),
       check: async (ctx) => {
         const bin = effects.findIiiBinary();
-        if (!bin) return { ok: false, detail: "iii not on PATH" };
+        if (!bin) return { ok: false, detail: dt(locale, "engineVersionMismatch.notOnPath") };
         const v = effects.iiiBinaryVersion(bin);
-        if (!v) return { ok: false, detail: "iii on PATH but --version failed" };
+        if (!v) return { ok: false, detail: dt(locale, "engineVersionMismatch.versionFailed") };
         return {
           ok: v === ctx.pinnedVersion,
           detail: `${v} (pinned ${ctx.pinnedVersion})`,
@@ -242,13 +248,9 @@ export function buildDiagnostics(effects: DoctorEffects): Diagnostic[] {
     },
     {
       id: "viewer-unreachable",
-      message: "Viewer port not reachable.",
-      fixPreview: "Stop the engine, restart it, and retry the viewer probe.",
-      moreInfo:
-        "The viewer is served on REST port + 2 (default 3113). If it never came up " +
-        "the most common cause is port collision; a sibling PR ships auto-bump for " +
-        "this case. If that lands first this check just verifies; otherwise restart " +
-        "the engine to retry binding.",
+      message: dt(locale, "viewerUnreachable.message"),
+      fixPreview: dt(locale, "viewerUnreachable.fixPreview"),
+      moreInfo: dt(locale, "viewerUnreachable.moreInfo"),
       check: async () => ({
         ok: await effects.viewerReachable(),
         detail: undefined,
@@ -261,19 +263,16 @@ export function buildDiagnostics(effects: DoctorEffects): Diagnostic[] {
     },
     {
       id: "stale-pidfile",
-      message: "Stale pidfile: pid recorded but the process is gone.",
-      fixPreview: "Clear ~/.agentmemory/iii.pid + engine-state.json, then restart.",
-      moreInfo:
-        "When the engine crashes hard (kill -9, OOM, host reboot) the pidfile sticks " +
-        "around. agentmemory refuses to start a second engine on top of a stale pid, " +
-        "so this state must be cleared explicitly.",
+      message: dt(locale, "stalePidfile.message"),
+      fixPreview: dt(locale, "stalePidfile.fixPreview"),
+      moreInfo: dt(locale, "stalePidfile.moreInfo"),
       check: async () => {
-        if (!effects.pidfileExists()) return { ok: true, detail: "no pidfile" };
+        if (!effects.pidfileExists()) return { ok: true, detail: dt(locale, "stalePidfile.noPidfile") };
         const alive = effects.pidfilePidIsAlive();
-        if (alive === null) return { ok: true, detail: "pidfile unreadable" };
+        if (alive === null) return { ok: true, detail: dt(locale, "stalePidfile.unreadable") };
         return {
           ok: alive,
-          detail: alive ? "pid is alive" : "pid is gone",
+          detail: alive ? dt(locale, "stalePidfile.alive") : dt(locale, "stalePidfile.gone"),
         };
       },
       fix: async () => {
@@ -283,15 +282,12 @@ export function buildDiagnostics(effects: DoctorEffects): Diagnostic[] {
     },
     {
       id: "env-placeholder-keys",
-      message: "~/.agentmemory/.env contains placeholder/empty API keys.",
-      fixPreview: "Open ~/.agentmemory/.env in $EDITOR to paste real values.",
-      moreInfo:
-        "Lines like ANTHROPIC_API_KEY=sk-ant-... or =your-key-here are treated as " +
-        "absent. The daemon will fall back to BM25-only search. Replace placeholders " +
-        "with real keys or comment the line out.",
+      message: dt(locale, "envPlaceholderKeys.message"),
+      fixPreview: dt(locale, "envPlaceholderKeys.fixPreview"),
+      moreInfo: dt(locale, "envPlaceholderKeys.moreInfo"),
       check: async () => {
         if (!effects.envFileExists()) {
-          return { ok: true, detail: "env file missing (handled by env-missing)" };
+          return { ok: true, detail: dt(locale, "envPlaceholderKeys.envMissingDetail") };
         }
         const env = effects.readEnvFile();
         const placeholders = placeholderProviderKeys(env);
@@ -300,29 +296,24 @@ export function buildDiagnostics(effects: DoctorEffects): Diagnostic[] {
           detail:
             placeholders.length === 0
               ? undefined
-              : `placeholder: ${placeholders.join(", ")}`,
+              : dt(locale, "envPlaceholderKeys.placeholderDetail", { keys: placeholders.join(", ") }),
         };
       },
       fix: (ctx) => effects.openEditor(ctx.envPath),
     },
     {
       id: "iii-on-path-not-local-bin",
-      message:
-        "iii is on PATH but not in ~/.local/bin/iii (where we install).",
-      fixPreview:
-        "Suggest re-installing the pinned version via the installer — won't touch your PATH.",
-      moreInfo:
-        "agentmemory's installer writes to ~/.local/bin/iii. When a user-managed iii " +
-        "lives somewhere else (homebrew, cargo, $XDG_BIN) we don't auto-overwrite it. " +
-        "If you want our pinned build, run the installer; otherwise this is informational.",
+      message: dt(locale, "iiiOnPathNotLocalBin.message"),
+      fixPreview: dt(locale, "iiiOnPathNotLocalBin.fixPreview"),
+      moreInfo: dt(locale, "iiiOnPathNotLocalBin.moreInfo"),
       manualOnly: true,
       check: async () => {
         const bin = effects.findIiiBinary();
-        if (!bin) return { ok: true, detail: "iii not on PATH (handled elsewhere)" };
+        if (!bin) return { ok: true, detail: dt(locale, "iiiOnPathNotLocalBin.notOnPath") };
         const localBin = effects.localBinIiiPath();
         return {
           ok: bin === localBin,
-          detail: bin === localBin ? undefined : `iii at: ${bin}`,
+          detail: bin === localBin ? undefined : dt(locale, "iiiOnPathNotLocalBin.atPath", { bin }),
         };
       },
       fix: async () =>
@@ -330,7 +321,7 @@ export function buildDiagnostics(effects: DoctorEffects): Diagnostic[] {
           ok: r.ok,
           message:
             r.message ??
-            "Installer wrote to ~/.local/bin/iii. Your PATH wasn't modified — adjust it yourself if needed.",
+            dt(locale, "iiiOnPathNotLocalBin.installed"),
         })),
     },
   ];
@@ -361,6 +352,7 @@ export async function runAllChecks(
 export function dryRunPlan(
   ctx: DoctorContext,
   results: Array<{ diagnostic: Diagnostic; status: DiagnosticStatus }>,
+  locale: Locale = "en",
 ): string[] {
   const lines: string[] = [];
   let n = 0;
@@ -368,11 +360,11 @@ export function dryRunPlan(
     if (status.ok) continue;
     n++;
     lines.push(`${n}. [${diagnostic.id}] ${diagnostic.message}`);
-    lines.push(`   would fix: ${diagnostic.fixPreview}`);
-    if (status.detail) lines.push(`   detail: ${status.detail}`);
+    lines.push(`   ${dt(locale, "dryRun.wouldFix")}: ${diagnostic.fixPreview}`);
+    if (status.detail) lines.push(`   ${dt(locale, "dryRun.detail")}: ${status.detail}`);
   }
   if (lines.length === 0) {
-    lines.push(`All checks passing for ${ctx.baseUrl} — no fixes to run.`);
+    lines.push(dt(locale, "dryRun.allPassing", { baseUrl: ctx.baseUrl }));
   }
   return lines;
 }

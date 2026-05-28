@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "graph": "Graph",
+    "memories": "Memories",
+    "timeline": "Timeline",
+    "sessions": "Sessions",
+    "lessons": "Lessons",
+    "actions": "Actions",
+    "crystals": "Crystals",
+    "audit": "Audit",
+    "activity": "Activity",
+    "profile": "Profile",
+    "replay": "Replay"
+  },
+  "theme": {
+    "dark": "DARK",
+    "light": "LIGHT"
+  },
+  "ws": {
+    "off": "live updates off"
+  },
+  "brand": {
+    "dashboardAria": "Open dashboard"
+  },
+  "footer": {
+    "versionLoading": "loading...",
+    "github": "github",
+    "docs": "docs",
+    "feedback": "report issue ->"
+  },
+  "timeline": {
+    "sortOrder": "Timeline sort order",
+    "newestFirst": "NEWEST FIRST",
+    "oldestFirst": "OLDEST FIRST"
+  }
+}

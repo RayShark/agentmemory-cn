@@ -940,30 +940,30 @@
 </head>
 <body>
   <div class="app-header">
-    <a class="brand" href="#dashboard" data-tab-link="dashboard" aria-label="Open dashboard">
+    <a class="brand" href="#dashboard" data-tab-link="dashboard" aria-label="Open dashboard" data-i18n-attr="aria-label:brand.dashboardAria">
       <h1>agentmemory</h1>
       <span class="version">v__AGENTMEMORY_VERSION__</span>
     </a>
     <div class="header-right">
       <span class="dateline" id="dateline"></span>
-      <button id="theme-toggle" class="btn" style="font-size:9px;padding:3px 10px;letter-spacing:0.1em;margin-right:8px;" data-action="toggle-theme">DARK</button>
-      <span id="ws-status" class="ws-status disconnected">live updates off</span>
+      <button id="theme-toggle" class="btn" style="font-size:9px;padding:3px 10px;letter-spacing:0.1em;margin-right:8px;" data-action="toggle-theme" data-i18n="theme.dark">DARK</button>
+      <span id="ws-status" class="ws-status disconnected" data-i18n="ws.off">live updates off</span>
     </div>
   </div>
 
   <div class="tab-bar" id="tab-bar">
-    <button class="active" data-tab="dashboard" aria-current="page">Dashboard</button>
-    <button data-tab="graph">Graph</button>
-    <button data-tab="memories">Memories</button>
-    <button data-tab="timeline">Timeline</button>
-    <button data-tab="sessions">Sessions</button>
-    <button data-tab="lessons">Lessons</button>
-    <button data-tab="actions">Actions</button>
-    <button data-tab="crystals">Crystals</button>
-    <button data-tab="audit">Audit</button>
-    <button data-tab="activity">Activity</button>
-    <button data-tab="profile">Profile</button>
-    <button data-tab="replay">Replay</button>
+    <button class="active" data-tab="dashboard" aria-current="page" data-i18n="nav.dashboard">Dashboard</button>
+    <button data-tab="graph" data-i18n="nav.graph">Graph</button>
+    <button data-tab="memories" data-i18n="nav.memories">Memories</button>
+    <button data-tab="timeline" data-i18n="nav.timeline">Timeline</button>
+    <button data-tab="sessions" data-i18n="nav.sessions">Sessions</button>
+    <button data-tab="lessons" data-i18n="nav.lessons">Lessons</button>
+    <button data-tab="actions" data-i18n="nav.actions">Actions</button>
+    <button data-tab="crystals" data-i18n="nav.crystals">Crystals</button>
+    <button data-tab="audit" data-i18n="nav.audit">Audit</button>
+    <button data-tab="activity" data-i18n="nav.activity">Activity</button>
+    <button data-tab="profile" data-i18n="nav.profile">Profile</button>
+    <button data-tab="replay" data-i18n="nav.replay">Replay</button>
   </div>
 
   <div id="flag-banners" class="flag-banners"></div>
@@ -986,16 +986,17 @@
   </div>
 
   <footer id="viewer-footer" class="viewer-footer">
-    <span>agentmemory viewer · <span id="footer-version">loading...</span></span>
+    <span>agentmemory viewer · <span id="footer-version" data-i18n="footer.versionLoading">loading...</span></span>
     <span class="footer-sep">·</span>
-    <a href="https://github.com/rohitg00/agentmemory" target="_blank" rel="noopener">github</a>
+    <a href="https://github.com/rohitg00/agentmemory" target="_blank" rel="noopener" data-i18n="footer.github">github</a>
     <span class="footer-sep">·</span>
-    <a href="https://github.com/rohitg00/agentmemory#readme" target="_blank" rel="noopener">docs</a>
+    <a href="https://github.com/rohitg00/agentmemory#readme" target="_blank" rel="noopener" data-i18n="footer.docs">docs</a>
     <span class="footer-sep">·</span>
-    <a id="footer-feedback" href="#" target="_blank" rel="noopener">report issue &rarr;</a>
+    <a id="footer-feedback" href="#" target="_blank" rel="noopener" data-i18n="footer.feedback">report issue &rarr;</a>
   </footer>
 
   <script nonce="__AGENTMEMORY_VIEWER_NONCE__">
+    window.__AM_LOCALE__ = __AGENTMEMORY_VIEWER_LOCALE__;
     var params = new URLSearchParams(window.location.search);
     var paramPort = params.get('port');
     var locPort = window.location.port;
@@ -1022,14 +1023,70 @@
       WS_DIRECT_URL = WS_URL + '/stream/mem-live/viewer';
     }
 
+    var LOCALE_BUNDLE = window.__AM_LOCALE__ || { locale: 'en', messages: { en: {}, current: {} } };
+    var SAFE_I18N_ATTRS = {
+      placeholder: true,
+      title: true,
+      alt: true,
+      'aria-label': true,
+      'aria-roledescription': true
+    };
+
+    function localeLookup(tree, key) {
+      var current = tree;
+      var parts = String(key || '').split('.');
+      for (var i = 0; i < parts.length; i++) {
+        if (current && typeof current === 'object' && Object.prototype.hasOwnProperty.call(current, parts[i])) {
+          current = current[parts[i]];
+        } else {
+          return null;
+        }
+      }
+      return typeof current === 'string' ? current : null;
+    }
+
+    function interpolate(template, vars) {
+      vars = vars || {};
+      return String(template).replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, function(match, key) {
+        return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match;
+      });
+    }
+
+    function tRaw(key, vars) {
+      var current = LOCALE_BUNDLE.messages && LOCALE_BUNDLE.messages.current;
+      var en = LOCALE_BUNDLE.messages && LOCALE_BUNDLE.messages.en;
+      var template = localeLookup(current || {}, key) || localeLookup(en || {}, key) || key;
+      return interpolate(template, vars);
+    }
+
+    function t(key, vars) {
+      return esc(tRaw(key, vars));
+    }
+
+    function applyI18n(root) {
+      root = root || document;
+      root.querySelectorAll('[data-i18n]').forEach(function(el) {
+        el.textContent = tRaw(el.getAttribute('data-i18n'));
+      });
+      root.querySelectorAll('[data-i18n-attr]').forEach(function(el) {
+        String(el.getAttribute('data-i18n-attr') || '').split(',').forEach(function(pair) {
+          var parts = pair.split(':');
+          var attr = (parts[0] || '').trim();
+          var key = (parts[1] || '').trim();
+          if (!SAFE_I18N_ATTRS[attr] || !key) return;
+          el.setAttribute(attr, tRaw(key));
+        });
+      });
+    }
+
     var dateEl = document.getElementById('dateline');
-    if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    if (dateEl) dateEl.textContent = new Date().toLocaleDateString(LOCALE_BUNDLE.locale || 'en', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
 
     function isDarkMode() { return document.documentElement.dataset.theme === 'dark'; }
     function applyTheme(dark, persist) {
       document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       var btn = document.getElementById('theme-toggle');
-      if (btn) btn.textContent = dark ? 'LIGHT' : 'DARK';
+      if (btn) btn.textContent = dark ? tRaw('theme.light') : tRaw('theme.dark');
       if (persist) localStorage.setItem('agentmemory-theme', dark ? 'dark' : 'light');
     }
     window.toggleTheme = function() { applyTheme(!isDarkMode(), true); };
@@ -1039,6 +1096,7 @@
     } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       applyTheme(true, false);
     }
+    applyI18n();
 
     var NODE_COLORS = {
       file: '#2D6A4F', function: '#1D4E89', concept: '#B8860B', error: '#CC0000',
@@ -2432,9 +2490,9 @@
         html += '<option value="' + i + '"' + (state.timeline.minImportance === i ? ' selected' : '') + '>&ge; ' + i + '</option>';
       }
       html += '</select>';
-      html += '<div class="sort-toggle" role="group" aria-label="Timeline sort order">';
-      html += '<button type="button" class="btn' + (timelineSortOrder() === 'desc' ? ' active' : '') + '" data-action="timeline-sort" data-sort-order="desc" aria-pressed="' + (timelineSortOrder() === 'desc' ? 'true' : 'false') + '">NEWEST FIRST</button>';
-      html += '<button type="button" class="btn' + (timelineSortOrder() === 'asc' ? ' active' : '') + '" data-action="timeline-sort" data-sort-order="asc" aria-pressed="' + (timelineSortOrder() === 'asc' ? 'true' : 'false') + '">OLDEST FIRST</button>';
+      html += '<div class="sort-toggle" role="group" aria-label="' + t('timeline.sortOrder') + '">';
+      html += '<button type="button" class="btn' + (timelineSortOrder() === 'desc' ? ' active' : '') + '" data-action="timeline-sort" data-sort-order="desc" aria-pressed="' + (timelineSortOrder() === 'desc' ? 'true' : 'false') + '">' + t('timeline.newestFirst') + '</button>';
+      html += '<button type="button" class="btn' + (timelineSortOrder() === 'asc' ? ' active' : '') + '" data-action="timeline-sort" data-sort-order="asc" aria-pressed="' + (timelineSortOrder() === 'asc' ? 'true' : 'false') + '">' + t('timeline.oldestFirst') + '</button>';
       html += '</div></div>';
       html += '<div id="tl-content"></div>';
       el.innerHTML = html;

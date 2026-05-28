@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
+import { currentCliLocale, cliTFor } from "../i18n.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 
 const PI_DIR = join(homedir(), ".pi");
@@ -19,24 +20,15 @@ export const adapter: ConnectAdapter = {
     return existsSync(PI_DIR);
   },
 
-  async install(_opts: ConnectOptions): Promise<ConnectResult> {
-    p.log.warn(
-      "pi uses a TypeScript extension file. Automated copy + register isn't implemented yet — manual install required.",
-    );
+  async install(opts: ConnectOptions): Promise<ConnectResult> {
+    const locale = opts.locale ?? currentCliLocale();
+    p.log.warn(cliTFor(locale, "connect.pi.warn"));
     p.note(
-      [
-        "Run these from the agentmemory repo root:",
-        "",
-        `  mkdir -p ${PI_EXT_DIR}`,
-        `  cp integrations/pi/index.ts ${PI_EXT_DIR}/index.ts`,
-        `  cp integrations/pi/security.ts ${PI_EXT_DIR}/security.ts`,
-        "",
-        "Then add to ~/.pi/agent/settings.json:",
-        '  { "extensions": ["~/.pi/agent/extensions/agentmemory"] }',
-        "",
-        `Full guide: ${DOCS}`,
-      ].join("\n"),
-      "pi manual install",
+      cliTFor(locale, "connect.pi.note", {
+        extDir: PI_EXT_DIR,
+        docs: DOCS,
+      }),
+      cliTFor(locale, "connect.pi.title"),
     );
     return {
       kind: "stub",

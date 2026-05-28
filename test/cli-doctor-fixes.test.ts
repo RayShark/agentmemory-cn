@@ -203,6 +203,26 @@ describe("doctor v2 diagnostic catalog", () => {
     expect(lines.length).toBe(1);
     expect(lines[0]).toContain("All checks passing");
   });
+
+  it("builds localized zh-CN diagnostic messages without changing ids", () => {
+    const diagnostics = buildDiagnostics(stubEffects(), "zh-CN");
+    const envMissing = diagnostics.find((d) => d.id === "env-missing")!;
+    expect(envMissing.id).toBe("env-missing");
+    expect(envMissing.message).toContain("缺少");
+    expect(envMissing.fixPreview).toContain("~/.agentmemory/.env");
+  });
+
+  it("dryRunPlan localizes zh-CN labels while preserving diagnostic ids", () => {
+    const diagnostics = buildDiagnostics(stubEffects(), "zh-CN");
+    const results = diagnostics.map((d) => ({
+      diagnostic: d,
+      status: { ok: false, detail: "no env" },
+    }));
+    const lines = dryRunPlan(stubCtx(), results, "zh-CN");
+    expect(lines.some((l) => l.includes("[env-missing]"))).toBe(true);
+    expect(lines.some((l) => l.includes("将修复"))).toBe(true);
+    expect(lines.some((l) => l.includes("详情"))).toBe(true);
+  });
 });
 
 describe("parseEnvFile", () => {

@@ -1,4 +1,6 @@
-export const SEMANTIC_MERGE_SYSTEM = `You are a memory consolidation engine. Given overlapping episodic memories (session summaries), extract stable factual knowledge.
+import { languageInstruction, type Locale } from "../i18n/index.js";
+
+const SEMANTIC_MERGE_SYSTEM_BASE = `You are a memory consolidation engine. Given overlapping episodic memories (session summaries), extract stable factual knowledge.
 
 Output format (XML):
 <facts>
@@ -10,6 +12,17 @@ Rules:
 - Confidence reflects how well-supported the fact is across episodes
 - Combine overlapping information into single concise facts
 - Skip ephemeral details (specific error messages, temporary states)`;
+
+function withLanguageInstruction(system: string, locale: Locale): string {
+  const instruction = languageInstruction(locale);
+  return instruction ? `${system}\n\nLanguage:\n- ${instruction}` : system;
+}
+
+export function buildSemanticMergeSystem(locale: Locale = "en"): string {
+  return withLanguageInstruction(SEMANTIC_MERGE_SYSTEM_BASE, locale);
+}
+
+export const SEMANTIC_MERGE_SYSTEM = buildSemanticMergeSystem();
 
 export function buildSemanticMergePrompt(
   episodes: Array<{ title: string; narrative: string; concepts: string[] }>,
@@ -23,7 +36,7 @@ export function buildSemanticMergePrompt(
   return `Consolidate these episodic memories into stable facts:\n\n${items}`;
 }
 
-export const PROCEDURAL_EXTRACTION_SYSTEM = `You are a procedural memory extractor. Given repeated patterns and workflows observed across sessions, extract reusable procedures.
+const PROCEDURAL_EXTRACTION_SYSTEM_BASE = `You are a procedural memory extractor. Given repeated patterns and workflows observed across sessions, extract reusable procedures.
 
 Output format (XML):
 <procedures>
@@ -37,6 +50,12 @@ Rules:
 - Only extract procedures observed 2+ times
 - Steps should be concrete and actionable
 - Trigger condition should be specific enough to match automatically`;
+
+export function buildProceduralExtractionSystem(locale: Locale = "en"): string {
+  return withLanguageInstruction(PROCEDURAL_EXTRACTION_SYSTEM_BASE, locale);
+}
+
+export const PROCEDURAL_EXTRACTION_SYSTEM = buildProceduralExtractionSystem();
 
 export function buildProceduralExtractionPrompt(
   patterns: Array<{ content: string; frequency: number }>,

@@ -9,11 +9,12 @@ import type {
 import { KV, generateId } from "../state/schema.js";
 import type { StateKV } from "../state/kv.js";
 import {
-  GRAPH_EXTRACTION_SYSTEM,
+  buildGraphExtractionSystem,
   buildGraphExtractionPrompt,
 } from "../prompts/graph-extraction.js";
 import { recordAudit } from "./audit.js";
 import { logger } from "../logger.js";
+import { getLocale } from "../config.js";
 
 function parseGraphXml(
   xml: string,
@@ -108,7 +109,7 @@ export function registerGraphFunction(
 
       try {
         const response = await provider.compress(
-          GRAPH_EXTRACTION_SYSTEM,
+          buildGraphExtractionSystem(getLocale()),
           prompt,
         );
 

@@ -1,3 +1,5 @@
+import { t, type Locale } from "../i18n/index.js";
+
 export type McpToolDef = {
   name: string;
   description: string;
@@ -7,6 +9,44 @@ export type McpToolDef = {
     required?: string[];
   };
 };
+
+function localizedText(
+  locale: Locale,
+  key: string,
+  fallback: string,
+): string {
+  const value = t(locale, key);
+  return value === key ? fallback : value;
+}
+
+function localizeTool(tool: McpToolDef, locale: Locale): McpToolDef {
+  if (locale === "en") return tool;
+  const properties = Object.fromEntries(
+    Object.entries(tool.inputSchema.properties).map(([key, prop]) => [
+      key,
+      {
+        ...prop,
+        description: localizedText(
+          locale,
+          `mcp.tools.${tool.name}.properties.${key}`,
+          prop.description,
+        ),
+      },
+    ]),
+  );
+  return {
+    ...tool,
+    description: localizedText(
+      locale,
+      `mcp.tools.${tool.name}.description`,
+      tool.description,
+    ),
+    inputSchema: {
+      ...tool.inputSchema,
+      properties,
+    },
+  };
+}
 
 export const CORE_TOOLS: McpToolDef[] = [
   {
@@ -928,8 +968,8 @@ const ESSENTIAL_TOOLS = new Set([
   "memory_reflect",
 ]);
 
-export function getAllTools(): McpToolDef[] {
-  return [
+export function getAllTools(locale: Locale = "en"): McpToolDef[] {
+  const tools = [
     ...CORE_TOOLS,
     ...V040_TOOLS,
     ...V050_TOOLS,
@@ -939,6 +979,7 @@ export function getAllTools(): McpToolDef[] {
     ...V073_TOOLS,
     ...V010_SLOTS_TOOLS,
   ];
+  return tools.map((tool) => localizeTool(tool, locale));
 }
 
 // default switched from "core" (8 essential tools) to "all"
@@ -946,8 +987,8 @@ export function getAllTools(): McpToolDef[] {
 // advertised 51 tools "in proxy mode"; the old default left OpenCode /
 // Claude Code users seeing 8 with no indication the other 43 existed.
 // Users who want the lean essentials can still set AGENTMEMORY_TOOLS=core.
-export function getVisibleTools(): McpToolDef[] {
+export function getVisibleTools(locale: Locale = "en"): McpToolDef[] {
   const mode = process.env["AGENTMEMORY_TOOLS"] || "all";
-  if (mode === "core") return getAllTools().filter((t) => ESSENTIAL_TOOLS.has(t.name));
-  return getAllTools();
+  if (mode === "core") return getAllTools(locale).filter((t) => ESSENTIAL_TOOLS.has(t.name));
+  return getAllTools(locale);
 }

@@ -1,4 +1,6 @@
-export const SUMMARY_SYSTEM = `You are a session summarizer for an AI coding agent's memory system. Given all compressed observations from a coding session, produce a concise session summary.
+import { languageInstruction, type Locale } from "../i18n/index.js";
+
+const SUMMARY_SYSTEM_BASE = `You are a session summarizer for an AI coding agent's memory system. Given all compressed observations from a coding session, produce a concise session summary.
 
 Output EXACTLY this XML format with no additional text:
 
@@ -22,6 +24,17 @@ Rules:
 - List all files that were created or modified
 - Concepts should be searchable terms for future context retrieval`
 
+function withLanguageInstruction(system: string, locale: Locale): string {
+  const instruction = languageInstruction(locale);
+  return instruction ? `${system}\n\nLanguage:\n- ${instruction}` : system;
+}
+
+export function buildSummarySystem(locale: Locale = "en"): string {
+  return withLanguageInstruction(SUMMARY_SYSTEM_BASE, locale);
+}
+
+export const SUMMARY_SYSTEM = buildSummarySystem();
+
 export function buildSummaryPrompt(observations: Array<{
   type: string
   title: string
@@ -37,7 +50,7 @@ export function buildSummaryPrompt(observations: Array<{
   return `Session observations (${observations.length} total):\n\n${lines.join('\n\n---\n\n')}`
 }
 
-export const REDUCE_SYSTEM = `You are merging multiple partial summaries of the SAME coding session into one final session summary. The partials are chronological chunks of one continuous session — not separate sessions.
+const REDUCE_SYSTEM_BASE = `You are merging multiple partial summaries of the SAME coding session into one final session summary. The partials are chronological chunks of one continuous session — not separate sessions.
 
 Output EXACTLY this XML format with no additional text:
 
@@ -60,6 +73,12 @@ Rules:
 - Preserve every distinct decision across chunks
 - Union (deduplicate) all files and concepts
 - Title should capture the session's overall outcome`
+
+export function buildReduceSystem(locale: Locale = "en"): string {
+  return withLanguageInstruction(REDUCE_SYSTEM_BASE, locale);
+}
+
+export const REDUCE_SYSTEM = buildReduceSystem();
 
 export function buildReducePrompt(partials: Array<{
   title: string

@@ -90,6 +90,14 @@ PRs with commits lacking sign-off will not merge.
 2. Wire the handler in `src/hooks/<hook-name>.ts`.
 3. Add a Vitest case that fires the hook and asserts the observation gets written.
 
+## Adding a locale
+
+1. Add message keys to `src/i18n/locales/<locale>.json` and keep the key tree in parity with `en.json`.
+2. Add Viewer strings to `src/viewer/locales/<locale>.json`; do not translate URLs, code identifiers, REST paths, MCP tool names, XML/JSON tags, enum values, or stored user content.
+3. Add locale-aware prompt coverage under `test/prompts-i18n.test.ts`; generated natural-language fields may be localized, but schemas and enum domains must stay English.
+4. If the plugin needs localized agent-facing instructions, add matching files under `plugin/skills.<locale>/` and `plugin/opencode/commands.<locale>/` while keeping frontmatter machine fields unchanged.
+5. Run the focused locale tests plus `npm run build`.
+
 ## Release process
 
 Maintainers cut releases. Every bump touches 8 files in lockstep:

@@ -17,6 +17,8 @@ import {
   listPinnedSlots,
   renderPinnedContext,
 } from "./slots.js";
+import { getLocale } from "../config.js";
+import { t } from "../i18n/index.js";
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3);
@@ -38,6 +40,7 @@ export function registerContextFunction(
   sdk.registerFunction("mem::context", 
     async (data: { sessionId: string; project: string; budget?: number }) => {
       const budget = data.budget || tokenBudget;
+      const locale = getLocale();
       const blocks: ContextBlock[] = [];
 
       const [pinnedSlots, profile, lessons] = await Promise.all([
@@ -63,7 +66,7 @@ export function registerContextFunction(
         const profileParts = [];
         if (profile.topConcepts.length > 0) {
           profileParts.push(
-            `Concepts: ${profile.topConcepts
+            `${t(locale, "context.concepts")}: ${profile.topConcepts
               .slice(0, 8)
               .map((c) => c.concept)
               .join(", ")}`,
@@ -71,22 +74,22 @@ export function registerContextFunction(
         }
         if (profile.topFiles.length > 0) {
           profileParts.push(
-            `Key files: ${profile.topFiles
+            `${t(locale, "context.keyFiles")}: ${profile.topFiles
               .slice(0, 5)
               .map((f) => f.file)
               .join(", ")}`,
           );
         }
         if (profile.conventions.length > 0) {
-          profileParts.push(`Conventions: ${profile.conventions.join("; ")}`);
+          profileParts.push(`${t(locale, "context.conventions")}: ${profile.conventions.join("; ")}`);
         }
         if (profile.commonErrors.length > 0) {
           profileParts.push(
-            `Common errors: ${profile.commonErrors.slice(0, 3).join("; ")}`,
+            `${t(locale, "context.commonErrors")}: ${profile.commonErrors.slice(0, 3).join("; ")}`,
           );
         }
         if (profileParts.length > 0) {
-          const profileContent = `## Project Profile\n${profileParts.join("\n")}`;
+          const profileContent = `## ${t(locale, "context.projectProfile")}\n${profileParts.join("\n")}`;
           blocks.push({
             type: "memory",
             content: profileContent,
@@ -118,7 +121,7 @@ export function registerContextFunction(
               `- (${l.confidence.toFixed(2)}) ${l.content}${l.context ? ` — ${l.context}` : ""}`,
           )
           .join("\n");
-        const lessonsContent = `## Lessons Learned\n${items}`;
+        const lessonsContent = `## ${t(locale, "context.lessonsLearned")}\n${items}`;
         const mostRecent = relevantLessons.reduce((acc, l) => {
           const t = new Date(l.lastReinforcedAt || l.updatedAt).getTime();
           return t > acc ? t : acc;
@@ -151,7 +154,7 @@ export function registerContextFunction(
       for (let i = 0; i < sessions.length; i++) {
         const summary = summariesPerSession[i];
         if (summary) {
-          const content = `## ${summary.title}\n${summary.narrative}\nDecisions: ${summary.keyDecisions.join("; ")}\nFiles: ${summary.filesModified.join(", ")}`;
+          const content = `## ${summary.title}\n${summary.narrative}\n${t(locale, "context.decisions")}: ${summary.keyDecisions.join("; ")}\n${t(locale, "context.files")}: ${summary.filesModified.join(", ")}`;
           blocks.push({
             type: "summary",
             content,
@@ -185,7 +188,7 @@ export function registerContextFunction(
           const items = top
             .map((o) => `- [${o.type}] ${o.title}: ${o.narrative}`)
             .join("\n");
-          const content = `## Session ${sessions[i].id.slice(0, 8)} (${sessions[i].startedAt})\n${items}`;
+          const content = `## ${t(locale, "context.session")} ${sessions[i].id.slice(0, 8)} (${sessions[i].startedAt})\n${items}`;
           blocks.push({
             type: "observation",
             content,

@@ -7,8 +7,13 @@ import {
   buildViewerCsp,
 } from "../auth.js";
 import { VERSION } from "../version.js";
+import {
+  buildViewerLocaleBundle,
+  serializeViewerLocaleBundle,
+} from "./locales.js";
 
 const VIEWER_VERSION_PLACEHOLDER = "__AGENTMEMORY_VERSION__";
+const VIEWER_LOCALE_PLACEHOLDER = "__AGENTMEMORY_VIEWER_LOCALE__";
 
 function loadViewerTemplate(): string | null {
   const base = dirname(fileURLToPath(import.meta.url));
@@ -34,9 +39,11 @@ export function renderViewerDocument():
   }
 
   const nonce = createViewerNonce();
+  const localeBundle = serializeViewerLocaleBundle(buildViewerLocaleBundle());
   const html = template
     .replaceAll(VIEWER_NONCE_PLACEHOLDER, nonce)
-    .replaceAll(VIEWER_VERSION_PLACEHOLDER, VERSION);
+    .replaceAll(VIEWER_VERSION_PLACEHOLDER, VERSION)
+    .replaceAll(VIEWER_LOCALE_PLACEHOLDER, localeBundle);
   return {
     found: true,
     html,

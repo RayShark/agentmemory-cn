@@ -1,10 +1,12 @@
 import type { ISdk } from "iii-sdk";
+import { getLocale } from "../config.js";
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
 import type { StateKV } from "../state/kv.js";
 import { KV, generateId } from "../state/schema.js";
 import type { Action, ActionEdge, RoutineRun, MemoryProvider } from "../types.js";
 import { recordAudit } from "./audit.js";
 
-const FLOW_COMPRESS_SYSTEM = `You are a workflow summarizer. Given a completed action chain, produce a concise summary capturing:
+const FLOW_COMPRESS_SYSTEM_BASE = `You are a workflow summarizer. Given a completed action chain, produce a concise summary capturing:
 1. The overall goal and outcome
 2. Key steps taken and their results
 3. Any notable decisions or discoveries
@@ -19,6 +21,13 @@ Output as XML:
 <lesson>What to remember for next time</lesson>
 </summary>`;
 
+export function buildFlowCompressSystem(locale: Locale = getLocale()): string {
+  const instruction = languageInstruction(locale);
+  return instruction
+    ? `${FLOW_COMPRESS_SYSTEM_BASE}\n\n${instruction}`
+    : FLOW_COMPRESS_SYSTEM_BASE;
+}
+
 export function registerFlowCompressFunction(
   sdk: ISdk,
   kv: StateKV,
@@ -26,6 +35,7 @@ export function registerFlowCompressFunction(
 ): void {
   sdk.registerFunction("mem::flow-compress", 
     async (data: { runId?: string; actionIds?: string[]; project?: string }) => {
+      const locale = getLocale();
       let actionsToCompress: Action[] = [];
 
       if (data.runId) {
@@ -60,7 +70,7 @@ export function registerFlowCompressFunction(
       if (doneActions.length === 0) {
         return {
           success: true,
-          message: "No completed actions to compress",
+          message: t(locale, "flow.noCompletedActions"),
           compressed: 0,
         };
       }
@@ -73,11 +83,11 @@ export function registerFlowCompressFunction(
           relevantIds.has(e.targetActionId),
       );
 
-      const prompt = buildFlowPrompt(doneActions, relevantEdges);
+      const prompt = buildFlowPrompt(doneActions, relevantEdges, locale);
 
       try {
         const response = await provider.summarize(
-          FLOW_COMPRESS_SYSTEM,
+          buildFlowCompressSystem(locale),
           prompt,
         );
         const summary = parseFlowSummary(response);
@@ -88,8 +98,10 @@ export function registerFlowCompressFunction(
           createdAt: ts,
           updatedAt: ts,
           type: "workflow" as const,
-          title: summary.goal || `Workflow: ${doneActions.length} actions`,
-          content: formatSummary(summary),
+          title:
+            summary.goal ||
+            t(locale, "flow.workflowTitle", { count: doneActions.length }),
+          content: formatSummary(summary, locale),
           concepts: extractConcepts(doneActions),
           files: extractFiles(doneActions),
           sessionIds: [],
@@ -131,8 +143,9 @@ export function registerFlowCompressFunction(
 function buildFlowPrompt(
   actions: Action[],
   edges: ActionEdge[],
+  locale: Locale = getLocale(),
 ): string {
-  const lines: string[] = ["## Completed Action Chain\n"];
+  const lines: string[] = [`## ${t(locale, "promptInput.completedActionChain")}\n`];
 
   const sorted = [...actions].sort(
     (a, b) =>
@@ -142,13 +155,17 @@ function buildFlowPrompt(
   for (const action of sorted) {
     lines.push(`### ${action.title}`);
     if (action.description) lines.push(action.description);
-    if (action.result) lines.push(`Result: ${action.result}`);
-    lines.push(`Priority: ${action.priority}, Tags: ${(action.tags ?? []).join(", ")}`);
+    if (action.result) {
+      lines.push(`${t(locale, "promptInput.result")}: ${action.result}`);
+    }
+    lines.push(
+      `${t(locale, "promptInput.priority")}: ${action.priority}, ${t(locale, "promptInput.tags")}: ${(action.tags ?? []).join(", ")}`,
+    );
     lines.push("");
   }
 
   if (edges.length > 0) {
-    lines.push("## Dependencies");
+    lines.push(`## ${t(locale, "promptInput.dependencies")}`);
     for (const edge of edges) {
       lines.push(`- ${edge.sourceActionId} --${edge.type}--> ${edge.targetActionId}`);
     }
@@ -185,13 +202,15 @@ function formatSummary(s: {
   steps: string;
   discoveries: string;
   lesson: string;
-}): string {
+}, locale: Locale = getLocale()): string {
   const parts: string[] = [];
-  if (s.goal) parts.push(`Goal: ${s.goal}`);
-  if (s.outcome) parts.push(`Outcome: ${s.outcome}`);
-  if (s.steps) parts.push(`Steps: ${s.steps}`);
-  if (s.discoveries) parts.push(`Discoveries: ${s.discoveries}`);
-  if (s.lesson) parts.push(`Lesson: ${s.lesson}`);
+  if (s.goal) parts.push(`${t(locale, "flow.goal")}: ${s.goal}`);
+  if (s.outcome) parts.push(`${t(locale, "flow.outcome")}: ${s.outcome}`);
+  if (s.steps) parts.push(`${t(locale, "flow.steps")}: ${s.steps}`);
+  if (s.discoveries) {
+    parts.push(`${t(locale, "flow.discoveries")}: ${s.discoveries}`);
+  }
+  if (s.lesson) parts.push(`${t(locale, "flow.lesson")}: ${s.lesson}`);
   return parts.join("\n\n");
 }
 

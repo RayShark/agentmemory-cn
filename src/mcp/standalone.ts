@@ -3,7 +3,7 @@
 import { InMemoryKV } from "./in-memory-kv.js";
 import { createStdioTransport } from "./transport.js";
 import { getAllTools } from "./tools-registry.js";
-import { getStandalonePersistPath } from "../config.js";
+import { getLocale, getStandalonePersistPath } from "../config.js";
 import { VERSION } from "../version.js";
 import { generateId } from "../state/schema.js";
 import {
@@ -435,7 +435,9 @@ export async function handleToolsList(): Promise<{ tools: unknown[] }> {
       invalidateHandle();
     }
   }
-  const fallback = getAllTools().filter((t) => IMPLEMENTED_TOOLS.has(t.name));
+  const fallback = getAllTools(getLocale()).filter((t) =>
+    IMPLEMENTED_TOOLS.has(t.name),
+  );
   if (debug) {
     process.stderr.write(
       `[@agentmemory/mcp] tools/list: returning ${fallback.length} local fallback tools (${fallback.map((t) => t.name).join(",")})\n`,

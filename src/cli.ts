@@ -33,14 +33,16 @@ import {
 } from "./cli/doctor-diagnostics.js";
 import {
   buildRemovePlan,
-  formatPlan,
   localBinIii,
   type ConnectManifest,
   type RemoveOptions,
+  type RemovePlanItem,
 } from "./cli/remove-plan.js";
 import { renderSplash } from "./cli/splash.js";
 import { isFirstRun, readPrefs, resetPrefs, writePrefs } from "./cli/preferences.js";
 import { runOnboarding } from "./cli/onboarding.js";
+import { currentCliLocale, cliT, cliTFor } from "./cli/i18n.js";
+import type { Locale } from "./i18n/index.js";
 import { setBootVerbose } from "./logger.js";
 import { VERSION } from "./version.js";
 
@@ -109,60 +111,7 @@ function vlog(msg: string): void {
 }
 
 if (args.includes("--help") || args.includes("-h")) {
-  console.log(`
-agentmemory — persistent memory for AI coding agents
-
-Usage: agentmemory [command] [options]
-
-Commands:
-  (default)          Start agentmemory worker
-  init               Copy bundled .env.example to ~/.agentmemory/.env if absent
-  connect [agent]    Wire agentmemory into an installed agent (claude-code, codex,
-                     cursor, gemini-cli, openclaw, hermes, pi, openhuman).
-                     No arg = interactive picker. --all wires every detected agent.
-                     --dry-run shows what would change. --force re-installs.
-  status             Show connection status, memory count, flags, and health
-  doctor             Interactive diagnostic + fixer. [F]ix · [S]kip · [?]more · [Q]uit
-                     --all: apply every fix without prompting (CI)
-                     --dry-run: show what each fix would do, don't execute
-  remove             Cleanly uninstall agentmemory (pidfile, state, .env, binaries).
-                     --force: skip confirmations · --keep-data: keep memory data
-  demo               Seed sample sessions and show recall in action
-  upgrade            Upgrade local deps + iii runtime (best effort)
-  stop [--force]     Stop the running iii-engine started by this CLI.
-                     --force bypasses the Docker-heuristic guard and signals
-                     whatever pidfile+lsof report on the REST port (use when
-                     the engine was started natively but state file is missing).
-  mcp                Start standalone MCP shim — opt-in surface for MCP-only clients
-                     (Cursor, Gemini CLI, etc). REST always available at :3111.
-  import-jsonl [p]   Import Claude Code JSONL transcripts (default: ~/.claude/projects)
-                     --max-files <N> | --max-files=<N>: override scan cap (default 200, max 1000;
-                     out-of-range is rejected; for trees >1000 files, batch by subdirectory)
-
-Options:
-  --help, -h         Show this help
-  --verbose, -v      Show engine stderr, boot log, and diagnostic info
-  --reset            Wipe ~/.agentmemory/preferences.json and re-run onboarding
-  --tools all|core   Tool visibility (default: all = 51 tools; core = 8 essentials)
-  --no-engine        Skip auto-starting iii-engine
-  --port <N>         Override REST port (default: 3111)
-
-Environment:
-  AGENTMEMORY_URL              Full REST base URL (e.g. http://localhost:3111).
-                               Honored by status, doctor, and MCP shim commands.
-  AGENTMEMORY_USE_DOCKER=1     Prefer the bundled docker-compose path over the
-                               native iii-engine binary on first run.
-  AGENTMEMORY_III_VERSION      Override pinned iii-engine version (default ${IIPINNED_VERSION}).
-
-Quick start:
-  npx @agentmemory/agentmemory          # start with local iii-engine or Docker
-  npx @agentmemory/agentmemory demo     # see semantic recall in 30 seconds
-  npx @agentmemory/agentmemory doctor   # diagnose config + feature flags
-  npx @agentmemory/agentmemory status   # health + memory count + flags
-  npx @agentmemory/agentmemory upgrade  # upgrade agentmemory + iii runtime
-  npx @agentmemory/agentmemory mcp      # standalone MCP server (no engine)
-  npx @agentmemory/mcp                  # same as above (shim package)
-`);
+  console.log(`\n${cliT("help.text", { pinnedVersion: IIPINNED_VERSION })}`);
   process.exit(0);
 }
 
@@ -369,7 +318,12 @@ function warnIfEngineVersionMismatch(iiiBinPath: string | null | undefined): voi
     ? `curl -fsSL https://github.com/iii-hq/iii/releases/download/iii/v${IIPINNED_VERSION}/${asset} | tar -xz -C ~/.local/bin`
     : `download v${IIPINNED_VERSION} from https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}`;
   p.log.warn(
-    `iii-engine on PATH is v${detected} but agentmemory v${VERSION} pins v${IIPINNED_VERSION}. Set AGENTMEMORY_III_VERSION=${detected} to silence, or downgrade with: \`${downloadHint}\``,
+    cliTFor(currentCliLocale(), "engine.versionMismatch", {
+      detected,
+      agentVersion: VERSION,
+      pinnedVersion: IIPINNED_VERSION,
+      downloadHint,
+    }),
   );
 }
 
@@ -495,10 +449,10 @@ async function maybeOfferGlobalInstall(): Promise<void> {
   if (process.env["CI"]) return;
   const prefs = readPrefs();
   if (prefs.skipGlobalInstall || prefs.skipNpxHint) return;
+  const locale = currentCliLocale();
 
   const answer = await p.confirm({
-    message:
-      "Install agentmemory globally so the bare `agentmemory` command works in any shell? [Y/n]",
+    message: cliTFor(locale, "globalInstall.prompt"),
     initialValue: true,
   });
   if (p.isCancel(answer)) {
@@ -507,35 +461,27 @@ async function maybeOfferGlobalInstall(): Promise<void> {
   }
   if (answer === false) {
     writePrefs({ skipGlobalInstall: true });
-    p.log.info(
-      "Skipped. Re-run via `npx @agentmemory/agentmemory` or install later with: npm install -g @agentmemory/agentmemory",
-    );
+    p.log.info(cliTFor(locale, "globalInstall.skipped"));
     return;
   }
 
   const npmBin = whichBinary("npm");
   if (!npmBin) {
-    p.log.warn(
-      "npm not found on PATH. Install manually: npm install -g @agentmemory/agentmemory",
-    );
+    p.log.warn(cliTFor(locale, "globalInstall.npmMissing"));
     return;
   }
   const ok = runCommand(
     npmBin,
     ["install", "-g", `@agentmemory/agentmemory@${VERSION}`],
-    { label: `Installing @agentmemory/agentmemory@${VERSION} globally` },
+    { label: cliTFor(locale, "globalInstall.installing", { version: VERSION }) },
   );
   if (ok) {
-    p.log.success(
-      "Installed globally. `agentmemory stop` etc. will now work in new shells.",
-    );
+    p.log.success(cliTFor(locale, "globalInstall.installed"));
     // Persist so we never re-prompt even if the user happens to npx
     // again from a CI-less TTY.
     writePrefs({ skipGlobalInstall: true });
   } else {
-    p.log.warn(
-      "Global install failed. Try manually: npm install -g @agentmemory/agentmemory",
-    );
+    p.log.warn(cliTFor(locale, "globalInstall.failed"));
   }
 }
 
@@ -573,10 +519,10 @@ async function ensureIiiConsole(): Promise<IiiConsoleState> {
   if (!process.stdin.isTTY || process.env["CI"]) return state;
   const prefs = readPrefs();
   if (prefs.skipConsoleInstall) return state;
+  const locale = currentCliLocale();
 
   const answer = await p.confirm({
-    message:
-      "iii console gives engine-level visibility (workers, functions, queues, traces). Install now?",
+    message: cliTFor(locale, "console.prompt"),
     initialValue: true,
   });
   if (p.isCancel(answer)) return state;
@@ -588,18 +534,14 @@ async function ensureIiiConsole(): Promise<IiiConsoleState> {
   const shBin = whichBinary("sh");
   const curlBin = whichBinary("curl");
   if (!shBin || !curlBin) {
-    p.log.warn(
-      `curl or sh not found. Install manually:\n  ${III_CONSOLE_INSTALL_CMD}`,
-    );
+    p.log.warn(cliTFor(locale, "console.missingCurl", { command: III_CONSOLE_INSTALL_CMD }));
     return state;
   }
   const ok = runCommand(shBin, ["-c", III_CONSOLE_INSTALL_CMD], {
-    label: "Installing iii console",
+    label: cliTFor(locale, "console.installing"),
   });
   if (!ok) {
-    p.log.warn(
-      `iii console install failed. Re-run manually:\n  ${III_CONSOLE_INSTALL_CMD}`,
-    );
+    p.log.warn(cliTFor(locale, "console.failed", { command: III_CONSOLE_INSTALL_CMD }));
     return state;
   }
   // Re-detect rather than trust install-script output paths.
@@ -608,6 +550,7 @@ async function ensureIiiConsole(): Promise<IiiConsoleState> {
 
 function adoptRunningEngine(): void {
   try {
+    const locale = currentCliLocale();
     const existingState = readEngineState();
     const existingPid = readEnginePidfile();
     if (existingState && existingPid) return;
@@ -625,7 +568,7 @@ function adoptRunningEngine(): void {
       });
     }
     if (enginePid && !existingPid) {
-      p.log.info(`Attached to existing iii-engine (pid ${enginePid})`);
+      p.log.info(cliTFor(locale, "engine.attachedExisting", { pid: enginePid }));
     }
   } catch (err) {
     vlog(`adoptRunningEngine: ${err instanceof Error ? err.message : String(err)}`);
@@ -633,23 +576,32 @@ function adoptRunningEngine(): void {
 }
 
 async function runIiiInstaller(): Promise<{ ok: boolean; binPath: string | null }> {
+  const locale = currentCliLocale();
   const releaseUrl = iiiReleaseUrl();
   const asset = iiiReleaseAsset();
   const isZipAsset = asset?.endsWith(".zip") === true;
+  const manualUrl = `https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}`;
 
   if (!releaseUrl) {
     p.log.warn(
-      `iii-engine binary not available for ${platform()}/${process.arch}. Use Docker (\`docker pull iiidev/iii:${IIPINNED_VERSION}\`) or download manually from https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}.`,
+      cliTFor(locale, "engine.binaryUnavailable", {
+        platform: platform(),
+        arch: process.arch,
+        version: IIPINNED_VERSION,
+        url: manualUrl,
+      }),
     );
     return { ok: false, binPath: null };
   }
 
   if (IS_WINDOWS || isZipAsset) {
     p.log.info(
-      `Auto-install unavailable on ${platform()} — ${asset} isn't tar-compatible. Install manually:\n` +
-        `  1. Download ${releaseUrl}\n` +
-        `  2. Extract iii.exe and place it on PATH (e.g. %USERPROFILE%\\.local\\bin)\n` +
-        `Or use Docker: docker pull iiidev/iii:${IIPINNED_VERSION}`,
+      cliTFor(locale, "engine.autoInstallUnavailable", {
+        platform: platform(),
+        asset: asset ?? "iii archive",
+        url: releaseUrl,
+        version: IIPINNED_VERSION,
+      }),
     );
     return { ok: false, binPath: null };
   }
@@ -657,7 +609,7 @@ async function runIiiInstaller(): Promise<{ ok: boolean; binPath: string | null 
   const shBin = whichBinary("sh");
   const curlBin = whichBinary("curl");
   if (!shBin || !curlBin) {
-    p.log.warn("curl or sh not found. Cannot auto-install iii-engine.");
+    p.log.warn(cliTFor(locale, "engine.curlMissing"));
     return { ok: false, binPath: null };
   }
 
@@ -669,12 +621,15 @@ async function runIiiInstaller(): Promise<{ ok: boolean; binPath: string | null 
     `chmod +x "${binPath}"`,
   ].join(" && ");
   const installerOk = runCommand(shBin, ["-c", installCmd], {
-    label: `Installing iii-engine v${IIPINNED_VERSION} (pinned)`,
+    label: cliTFor(locale, "engine.installingPinned", { version: IIPINNED_VERSION }),
     optional: true,
   });
   if (!installerOk) {
     p.log.warn(
-      `iii-engine installer failed. Fallbacks: Docker (\`docker pull iiidev/iii:${IIPINNED_VERSION}\`) or download manually from https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}.`,
+      cliTFor(locale, "engine.installerFailed", {
+        version: IIPINNED_VERSION,
+        url: manualUrl,
+      }),
     );
     return { ok: false, binPath: null };
   }
@@ -698,6 +653,7 @@ function spawnEngineBackground(
   spawnArgs: string[],
   label: string,
 ): ChildProcess {
+  const locale = currentCliLocale();
   vlog(`spawn: ${bin} ${spawnArgs.join(" ")}`);
   const child = spawn(bin, spawnArgs, {
     detached: true,
@@ -725,15 +681,15 @@ function spawnEngineBackground(
       startupFailure = {
         kind: isDocker ? "docker-crashed" : "engine-crashed",
         stderr:
-          stderr.trim() ||
+        stderr.trim() ||
           (signal
-            ? `process killed by signal ${signal}`
-            : `process exited with code ${code}`),
+            ? cliTFor(locale, "engine.processKilled", { signal })
+            : cliTFor(locale, "engine.processExited", { code: code ?? "unknown" })),
         binary: bin,
       };
       vlog(`engine exited early: code=${code} signal=${signal}`);
       if (IS_VERBOSE && stderr.trim()) {
-        p.log.error(`engine stderr:\n${stderr}`);
+        p.log.error(`${cliTFor(locale, "engine.stderrTitle")}:\n${stderr}`);
       }
       if (!isDocker) clearEnginePidfile();
       clearEngineState();
@@ -744,16 +700,18 @@ function spawnEngineBackground(
 }
 
 function startIiiBin(iiiBin: string, configPath: string): boolean {
+  const locale = currentCliLocale();
   warnIfEngineVersionMismatch(iiiBin);
   const s = p.spinner();
-  s.start(`Starting iii-engine: ${iiiBin}`);
+  s.start(cliTFor(locale, "engine.startingBin", { path: iiiBin }));
   writeEngineState({ kind: "native", configPath });
   spawnEngineBackground(iiiBin, ["--config", configPath], "iii-engine");
-  s.stop("iii-engine process started");
+  s.stop(cliTFor(locale, "engine.processStarted"));
   return true;
 }
 
 async function startEngine(): Promise<boolean> {
+  const locale = currentCliLocale();
   const configPath = findIiiConfig();
   let iiiBin = whichBinary("iii");
   vlog(`iii binary: ${iiiBin ?? "(not on PATH)"}, config: ${configPath || "(not found)"}`);
@@ -764,7 +722,10 @@ async function startEngine(): Promise<boolean> {
     if (existsSync(iiiPath)) {
       const v = iiiBinVersion(iiiPath);
       vlog(`fallback iii at ${iiiPath} reports version: ${v ?? "unknown"}`);
-      p.log.info(`Found iii at: ${iiiPath}${v ? ` (v${v})` : ""}`);
+      p.log.info(cliTFor(locale, "engine.foundIii", {
+        path: iiiPath,
+        versionText: v ? ` (v${v})` : "",
+      }));
       process.env["PATH"] = `${dirname(iiiPath)}${PATH_DELIMITER}${process.env["PATH"] ?? ""}`;
       iiiBin = iiiPath;
       break;
@@ -800,23 +761,27 @@ async function startEngine(): Promise<boolean> {
     choice = "docker";
   } else if (!interactive) {
     choice = "install";
-    p.log.info("Non-interactive environment detected — auto-installing iii-engine.");
+    p.log.info(cliTFor(locale, "engine.nonInteractiveInstall"));
   } else {
-    p.log.warn(`iii-engine binary not found locally.`);
+    p.log.warn(cliTFor(locale, "engine.binaryMissing"));
     const options: { value: Choice; label: string; hint?: string }[] = [
       {
         value: "install",
-        label: `Install iii v${IIPINNED_VERSION} to ~/.local/bin (~6MB, ~5s)`,
-        hint: "recommended",
+        label: cliTFor(locale, "engine.installOption", { version: IIPINNED_VERSION }),
+        hint: cliTFor(locale, "engine.recommendedHint"),
       },
     ];
     if (dockerBin && composeFile) {
-      options.push({ value: "docker", label: "Use Docker compose", hint: "advanced" });
+      options.push({
+        value: "docker",
+        label: cliTFor(locale, "engine.dockerOption"),
+        hint: cliTFor(locale, "engine.advancedHint"),
+      });
     }
-    options.push({ value: "manual", label: "Show manual install steps and exit" });
+    options.push({ value: "manual", label: cliTFor(locale, "engine.manualOption") });
 
     const picked = await p.select<Choice>({
-      message: "How would you like to start iii-engine?",
+      message: cliTFor(locale, "engine.startChoice"),
       options,
       initialValue: "install",
     });
@@ -841,7 +806,7 @@ async function startEngine(): Promise<boolean> {
     }
     if (dockerBin && composeFile && interactive) {
       const fallback = await p.confirm({
-        message: "Auto-install failed. Try Docker compose instead?",
+        message: cliTFor(locale, "engine.autoInstallDockerFallback"),
         initialValue: true,
       });
       if (p.isCancel(fallback) || fallback !== true) {
@@ -857,14 +822,14 @@ async function startEngine(): Promise<boolean> {
 
   if (choice === "docker" && dockerBin && composeFile) {
     const s = p.spinner();
-    s.start("Starting iii-engine via Docker...");
+    s.start(cliTFor(locale, "engine.startingDocker"));
     writeEngineState({ kind: "docker", composeFile });
     spawnEngineBackground(
       dockerBin,
       ["compose", "-f", composeFile, "up", "-d"],
       "iii-engine via Docker",
     );
-    s.stop("Docker compose started");
+    s.stop(cliTFor(locale, "engine.dockerStarted"));
     return true;
   }
 
@@ -885,42 +850,21 @@ async function waitForEngine(timeoutMs: number): Promise<boolean> {
   return false;
 }
 
-function installInstructions(): string[] {
+function installInstructions(locale: Locale = currentCliLocale()): string[] {
   const releaseUrl = iiiReleaseUrl();
   if (IS_WINDOWS) {
-    return [
-      `agentmemory needs iii-engine v${IIPINNED_VERSION}. Pick one:`,
-      "",
-      "  A) Download the prebuilt Windows binary:",
-      `     1. Open https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}`,
-      `     2. Download iii-x86_64-pc-windows-msvc.zip (or iii-aarch64-pc-windows-msvc.zip on ARM)`,
-      "     3. Extract iii.exe to %USERPROFILE%\\.local\\bin\\iii.exe (or add to PATH)",
-      "     4. Re-run: npx @agentmemory/agentmemory",
-      "",
-      `  B) Docker: docker pull iiidev/iii:${IIPINNED_VERSION}`,
-      "     Re-run with AGENTMEMORY_USE_DOCKER=1 npx @agentmemory/agentmemory",
-      "",
-      "Or skip the engine entirely (standalone MCP):  npx @agentmemory/agentmemory mcp",
-      "",
-      "Docs: https://iii.dev/docs",
-    ];
+    return cliTFor(locale, "engine.installInstructionsWindows", {
+      version: IIPINNED_VERSION,
+    }).split("\n");
   }
+  const manualUrl = `https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}`;
   const linuxInstall = releaseUrl
     ? `  A) curl -fsSL "${releaseUrl}" | tar -xz -C ~/.local/bin && chmod +x ~/.local/bin/iii`
-    : `  A) Manual download: https://github.com/iii-hq/iii/releases/tag/iii%2Fv${IIPINNED_VERSION}`;
-  return [
-    `agentmemory needs iii-engine v${IIPINNED_VERSION}. Pick one:`,
-    "",
+    : cliTFor(locale, "engine.manualDownloadLine", { url: manualUrl });
+  return cliTFor(locale, "engine.installInstructionsUnix", {
+    version: IIPINNED_VERSION,
     linuxInstall,
-    "     Then re-run: npx @agentmemory/agentmemory",
-    "",
-    `  B) Docker: docker pull iiidev/iii:${IIPINNED_VERSION}`,
-    "     Re-run with AGENTMEMORY_USE_DOCKER=1 npx @agentmemory/agentmemory",
-    "",
-    "Or skip the engine entirely (standalone MCP):  npx @agentmemory/agentmemory mcp",
-    "",
-    "Docs: https://iii.dev/docs",
-  ];
+  }).split("\n");
 }
 
 function portInUseDiagnostic(port: number): string {
@@ -956,6 +900,7 @@ function getEngineHost(): string {
 }
 
 function printReadyHint(consoleState: IiiConsoleState): void {
+  const locale = currentCliLocale();
   // REST goes through getBaseUrl which already honors AGENTMEMORY_URL
   // for full host+protocol overrides. Streams/Engine are derived from
   // III_ENGINE_URL so a remote bind reads correctly in the panel.
@@ -996,10 +941,11 @@ function printReadyHint(consoleState: IiiConsoleState): void {
   const demoCommand = isInvokedViaNpx()
     ? "npx @agentmemory/agentmemory demo"
     : "agentmemory demo";
-  process.stdout.write(`\nTry: ${demoCommand}\n`);
+  process.stdout.write(`\n${cliTFor(locale, "engine.tryDemo", { command: demoCommand })}\n`);
 }
 
 async function main() {
+  const locale = currentCliLocale();
   // `--reset` wipes preferences before anything else so the onboarding
   // flow below always runs fresh.
   if (IS_RESET) {
@@ -1021,7 +967,7 @@ async function main() {
   }
 
   if (skipEngine) {
-    if (IS_VERBOSE) p.log.info("Skipping engine check (--no-engine)");
+    if (IS_VERBOSE) p.log.info(cliTFor(locale, "engine.skipCheck"));
     await import("./index.js");
     if (await waitForAgentmemoryReady(15000)) {
       const consoleState = await ensureIiiConsole();
@@ -1032,7 +978,7 @@ async function main() {
   }
 
   if (await isEngineRunning()) {
-    if (IS_VERBOSE) p.log.success("iii-engine is running");
+    if (IS_VERBOSE) p.log.success(cliTFor(locale, "engine.running"));
     const attachedBin =
       whichBinary("iii") ?? fallbackIiiPaths().find((p) => existsSync(p)) ?? null;
     warnIfEngineVersionMismatch(attachedBin);
@@ -1048,68 +994,55 @@ async function main() {
 
   const started = await startEngine();
   if (!started) {
-    p.log.error("Could not start iii-engine.");
-    const lines = installInstructions();
+    p.log.error(cliTFor(locale, "engine.startFailed"));
+    const lines = installInstructions(locale);
     if (startupFailure?.kind === "no-docker-compose") {
       lines.unshift(
-        "Docker is installed but docker-compose.yml is missing from this",
-        "install. Re-install with: npm install -g @agentmemory/agentmemory",
+        cliTFor(locale, "engine.dockerComposeMissingLine1"),
+        cliTFor(locale, "engine.dockerComposeMissingLine2"),
         "",
       );
     }
-    p.note(lines.join("\n"), "Setup required");
+    p.note(lines.join("\n"), cliTFor(locale, "engine.setupRequiredTitle"));
     process.exit(1);
   }
 
   const s = p.spinner();
-  s.start("Waiting for iii-engine to be ready...");
+  s.start(cliTFor(locale, "engine.waiting"));
 
   const ready = await waitForEngine(15000);
   if (!ready) {
     const port = getRestPort();
-    s.stop("iii-engine did not become ready within 15s");
+    s.stop(cliTFor(locale, "engine.notReady"));
 
     if (startupFailure?.kind === "engine-crashed" || startupFailure?.kind === "docker-crashed") {
-      p.log.error("The iii-engine process crashed on startup.");
+      p.log.error(cliTFor(locale, "engine.crashed"));
       if (startupFailure.binary) {
-        p.log.info(`Binary: ${startupFailure.binary}`);
+        p.log.info(cliTFor(locale, "engine.binary", { path: startupFailure.binary }));
       }
       if (startupFailure.stderr) {
-        p.note(startupFailure.stderr, "engine stderr");
+        p.note(startupFailure.stderr, cliTFor(locale, "engine.stderrTitle"));
       } else {
-        p.log.info("No stderr was captured. Re-run with --verbose for more detail.");
+        p.log.info(cliTFor(locale, "engine.noStderr"));
       }
       p.note(
-        [
-          "Common causes:",
-          "  - iii-engine version mismatch — reinstall the latest binary",
-          "    (sh script on macOS/Linux, GitHub release zip on Windows)",
-          "  - Docker Desktop not running (if you're using the Docker path)",
-          "  - Port already in use (see below)",
-          "",
-          "See https://iii.dev/docs for current install instructions.",
-        ].join("\n"),
-        "Troubleshooting",
+        cliTFor(locale, "engine.commonCauses"),
+        cliTFor(locale, "engine.troubleshootingTitle"),
       );
     } else {
-      p.log.error("The engine process started but the REST API never responded.");
+      p.log.error(cliTFor(locale, "engine.restNeverResponded"));
       p.note(
-        [
-          `Check whether port ${port} is already bound by another process:`,
-          portInUseDiagnostic(port),
-          "",
-          "If it is, free the port or override: agentmemory --port <N>",
-          "",
-          "If it isn't, a firewall may be blocking 127.0.0.1:" + port + ".",
-          "Re-run with --verbose to see engine stderr.",
-        ].join("\n"),
-        "Troubleshooting",
+        cliTFor(locale, "engine.restTroubleshooting", {
+          port,
+          diagnostic: portInUseDiagnostic(port),
+        }),
+        cliTFor(locale, "engine.troubleshootingTitle"),
       );
     }
     process.exit(1);
   }
 
-  s.stop("iii-engine is ready");
+  s.stop(cliTFor(locale, "engine.ready"));
   await import("./index.js");
   if (await waitForAgentmemoryReady(15000)) {
     const consoleState = await ensureIiiConsole();
@@ -1137,14 +1070,14 @@ async function apiFetch<T = unknown>(base: string, path: string, timeoutMs = 500
 }
 
 async function runStatus() {
-  const port = getRestPort();
   const base = getBaseUrl();
-  p.intro("agentmemory status");
+  const locale = currentCliLocale();
+  p.intro(cliTFor(locale, "status.intro"));
 
   const up = await isEngineRunning();
   if (!up) {
-    p.log.error(`Not running — no response at ${base}`);
-    p.log.info("Start with: npx @agentmemory/agentmemory");
+    p.log.error(cliTFor(locale, "status.notRunning", { base }));
+    p.log.info(cliTFor(locale, "common.startWith"));
     process.exit(1);
   }
 
@@ -1177,37 +1110,40 @@ async function runStatus() {
     const tokensSaved = estFullTokens - estInjectedTokens;
     const pctSaved = estFullTokens > 0 ? Math.round((tokensSaved / estFullTokens) * 100) : 0;
 
-    p.log.success(`Connected — v${version} at ${base}`);
+    p.log.success(cliTFor(locale, "status.connected", { version, base }));
 
     const lines = [
-      `Health:       ${status === "healthy" ? "✓ healthy" : status}`,
-      `Sessions:     ${sessions}`,
-      `Observations: ${obsCount}`,
-      `Memories:     ${memCount}`,
-      `Graph:        ${nodes} nodes, ${edges} edges`,
-      `Circuit:      ${cb}`,
-      `Heap:         ${heapMB} MB`,
-      `Uptime:       ${uptime}s`,
-      `Viewer:       ${getViewerUrl()}`,
+      `${cliTFor(locale, "status.health")}:       ${status === "healthy" ? cliTFor(locale, "status.healthy") : status}`,
+      `${cliTFor(locale, "status.sessions")}:     ${sessions}`,
+      `${cliTFor(locale, "status.observations")}: ${obsCount}`,
+      `${cliTFor(locale, "status.memories")}:     ${memCount}`,
+      `${cliTFor(locale, "status.graph")}:        ${nodes} nodes, ${edges} edges`,
+      `${cliTFor(locale, "status.circuit")}:      ${cb}`,
+      `${cliTFor(locale, "status.heap")}:         ${heapMB} MB`,
+      `${cliTFor(locale, "status.uptime")}:       ${uptime}s`,
+      `${cliTFor(locale, "status.viewer")}:       ${getViewerUrl()}`,
     ];
 
     if (obsCount > 0) {
       lines.push("");
-      lines.push(`Token savings: ~${tokensSaved.toLocaleString()} tokens saved (${pctSaved}% reduction)`);
-      lines.push(`  Full context: ~${estFullTokens.toLocaleString()} tokens`);
-      lines.push(`  Injected:     ~${estInjectedTokens.toLocaleString()} tokens`);
+      lines.push(cliTFor(locale, "status.tokenSavings", {
+        tokens: tokensSaved.toLocaleString(),
+        percent: pctSaved,
+      }));
+      lines.push(`  ${cliTFor(locale, "status.fullContext")}: ~${estFullTokens.toLocaleString()} tokens`);
+      lines.push(`  ${cliTFor(locale, "status.injected")}:     ~${estInjectedTokens.toLocaleString()} tokens`);
     }
 
     if (flagsRes) {
-      const provider = flagsRes.provider === "llm" ? "✓ llm" : "✗ noop (no key)";
+      const provider = flagsRes.provider === "llm" ? "✓ llm" : cliTFor(locale, "status.noopProvider");
       const embed = flagsRes.embeddingProvider === "embeddings" ? "✓ embeddings" : "bm25-only";
       const flagRows = (flagsRes.flags || []).map((f: { key: string; enabled: boolean; label: string }) =>
         `  ${f.enabled ? "✓" : "✗"} ${f.key.padEnd(32)} ${f.label}`
       );
       lines.push("");
-      lines.push(`Provider:     ${provider}`);
-      lines.push(`Embeddings:   ${embed}`);
-      lines.push(`Flags:`);
+      lines.push(`${cliTFor(locale, "status.provider")}:     ${provider}`);
+      lines.push(`${cliTFor(locale, "status.embeddings")}:   ${embed}`);
+      lines.push(`${cliTFor(locale, "status.flags")}:`);
       flagRows.forEach((r: string) => lines.push(r));
     }
 
@@ -1329,9 +1265,10 @@ function buildDoctorEffects(): DoctorEffects {
       }
     },
     runInit: async () => {
+      const locale = currentCliLocale();
       try {
         await runInit();
-        return { ok: true, message: "Wrote ~/.agentmemory/.env" };
+        return { ok: true, message: cliTFor(locale, "doctorEffects.wroteEnv") };
       } catch (err) {
         return {
           ok: false,
@@ -1340,24 +1277,31 @@ function buildDoctorEffects(): DoctorEffects {
       }
     },
     openEditor: async (path: string) => {
+      const locale = currentCliLocale();
       const editor = process.env["EDITOR"] || process.env["VISUAL"] || "nano";
-      p.log.info(`Opening ${path} in ${editor}…`);
+      p.log.info(cliTFor(locale, "doctorEffects.openingEditor", { path, editor }));
       try {
         // Inherit stdio so the user actually sees the editor.
         const result = spawnSync(editor, [path], { stdio: "inherit" });
         if (result.error) {
           return {
             ok: false,
-            message: `Failed to launch ${editor}: ${result.error.message}`,
+            message: cliTFor(locale, "doctorEffects.launchFailed", {
+              editor,
+              message: result.error.message,
+            }),
           };
         }
         if ((result.status ?? 0) !== 0) {
           return {
             ok: false,
-            message: `${editor} exited with code ${result.status}`,
+            message: cliTFor(locale, "doctorEffects.editorExited", {
+              editor,
+              code: result.status ?? "unknown",
+            }),
           };
         }
-        return { ok: true, message: `Saved ${path}` };
+        return { ok: true, message: cliTFor(locale, "doctorEffects.savedPath", { path }) };
       } catch (err) {
         return {
           ok: false,
@@ -1366,15 +1310,20 @@ function buildDoctorEffects(): DoctorEffects {
       }
     },
     runIiiInstaller: async () => {
+      const locale = currentCliLocale();
       const r = await runIiiInstaller();
       return {
         ok: r.ok,
         message: r.ok
-          ? `Installed iii v${IIPINNED_VERSION} to ${r.binPath}`
-          : "iii installer failed (see warnings above)",
+          ? cliTFor(locale, "doctorEffects.installedIii", {
+              version: IIPINNED_VERSION,
+              path: r.binPath,
+            })
+          : cliTFor(locale, "doctorEffects.iiiInstallerFailed"),
       };
     },
     runStop: async () => {
+      const locale = currentCliLocale();
       try {
         // runStop calls process.exit on its own — guard against that here
         // by short-circuiting when there's nothing to stop.
@@ -1384,7 +1333,7 @@ function buildDoctorEffects(): DoctorEffects {
         if (portPids.length === 0 && pidfilePid === null) {
           clearEnginePidfile();
           clearEngineState();
-          return { ok: true, message: "Nothing to stop." };
+          return { ok: true, message: cliTFor(locale, "doctorEffects.nothingToStop") };
         }
         const candidates = new Set<number>();
         if (pidfilePid) candidates.add(pidfilePid);
@@ -1398,7 +1347,9 @@ function buildDoctorEffects(): DoctorEffects {
         clearEngineState();
         return {
           ok: allStopped,
-          message: allStopped ? "Engine stopped." : "Some engine pids survived.",
+          message: allStopped
+            ? cliTFor(locale, "doctorEffects.engineStopped")
+            : cliTFor(locale, "doctorEffects.enginePidsSurvived"),
         };
       } catch (err) {
         return {
@@ -1408,13 +1359,18 @@ function buildDoctorEffects(): DoctorEffects {
       }
     },
     runStart: async () => {
+      const locale = currentCliLocale();
       try {
         const started = await startEngine();
-        if (!started) return { ok: false, message: "startEngine() returned false" };
+        if (!started) {
+          return { ok: false, message: cliTFor(locale, "doctorEffects.startReturnedFalse") };
+        }
         const ready = await waitForEngine(15000);
         return {
           ok: ready,
-          message: ready ? "Engine ready" : "Engine did not become ready within 15s",
+          message: ready
+            ? cliTFor(locale, "doctorEffects.engineReady")
+            : cliTFor(locale, "doctorEffects.engineNotReady"),
         };
       } catch (err) {
         return {
@@ -1430,17 +1386,17 @@ function buildDoctorEffects(): DoctorEffects {
   };
 }
 
-async function passiveServerChecks(): Promise<DoctorCheck[]> {
+async function passiveServerChecks(locale: Locale = currentCliLocale()): Promise<DoctorCheck[]> {
   const base = getBaseUrl();
   const checks: DoctorCheck[] = [];
 
   const serverUp = await isEngineRunning();
   checks.push({
-    name: "Server reachable",
+    name: cliTFor(locale, "doctor.serverReachable"),
     ok: serverUp,
     hint: serverUp
       ? undefined
-      : `Start with: npx @agentmemory/agentmemory (tried ${base})`,
+      : cliTFor(locale, "doctor.serverStartHint", { base }),
   });
   if (!serverUp) return checks;
 
@@ -1459,24 +1415,24 @@ async function passiveServerChecks(): Promise<DoctorCheck[]> {
 
   checks.push(
     {
-      name: "Health status",
+      name: cliTFor(locale, "doctor.healthStatus"),
       ok: health?.status === "healthy",
       hint:
         health?.status === "healthy"
           ? undefined
-          : `Status: ${health?.status || "unknown"}`,
+          : cliTFor(locale, "doctor.statusHint", { status: health?.status || "unknown" }),
     },
     {
-      name: "LLM provider",
+      name: cliTFor(locale, "doctor.llmProvider"),
       ok: hasLlm,
-      hint: hasLlm ? undefined : "set ANTHROPIC_API_KEY (or GEMINI/OPENROUTER/MINIMAX) in ~/.agentmemory/.env",
+      hint: hasLlm ? undefined : cliTFor(locale, "doctor.llmProviderHint"),
     },
     {
-      name: "Embedding provider",
+      name: cliTFor(locale, "doctor.embeddingProvider"),
       ok: hasEmbed,
       hint: hasEmbed
         ? undefined
-        : "Running BM25-only. Add OPENAI_API_KEY / VOYAGE_API_KEY / COHERE_API_KEY / OLLAMA_HOST",
+        : cliTFor(locale, "doctor.embeddingProviderHint"),
     },
   );
 
@@ -1503,27 +1459,25 @@ async function passiveServerChecks(): Promise<DoctorCheck[]> {
       case "not-loaded":
         return {
           ok: false,
-          hint:
-            "Plugin enabled but hooks not loaded by Claude Code. Try: /plugin uninstall agentmemory@agentmemory && /plugin install agentmemory@agentmemory, then restart the session.",
+          hint: cliTFor(locale, "doctor.ccHooksNotLoaded"),
         };
       case "no-debug-log":
         return {
           ok: false,
-          hint:
-            'Cannot verify — no Claude Code debug log found. Run once with `claude --debug -p "x"`, then re-run doctor.',
+          hint: cliTFor(locale, "doctor.ccNoDebugLog"),
         };
       case "no-cc-dir":
         return undefined;
     }
   })();
-  if (ccCheck) checks.push({ name: "Claude Code plugin hooks registered", ...ccCheck });
+  if (ccCheck) checks.push({ name: cliTFor(locale, "doctor.ccHooksRegistered"), ...ccCheck });
 
   checks.push({
-    name: "Knowledge graph populated",
+    name: cliTFor(locale, "doctor.graphPopulated"),
     ok: graphHas,
     hint: graphHas
       ? undefined
-      : "Graph is empty. Run a session with GRAPH_EXTRACTION_ENABLED=true.",
+      : cliTFor(locale, "doctor.graphEmptyHint"),
   });
 
   return checks;
@@ -1532,13 +1486,14 @@ async function passiveServerChecks(): Promise<DoctorCheck[]> {
 type DoctorAction = "fix" | "skip" | "more" | "quit";
 
 async function askFixAction(d: Diagnostic): Promise<DoctorAction> {
+  const locale = currentCliLocale();
   const choice = await p.select<DoctorAction>({
     message: `[${d.id}] ${d.message}`,
     options: [
-      { value: "fix", label: "F  Fix", hint: d.fixPreview },
-      { value: "skip", label: "S  Skip" },
-      { value: "more", label: "?  More info" },
-      { value: "quit", label: "Q  Quit doctor" },
+      { value: "fix", label: cliTFor(locale, "doctor.fix"), hint: d.fixPreview },
+      { value: "skip", label: cliTFor(locale, "doctor.skip") },
+      { value: "more", label: cliTFor(locale, "doctor.more") },
+      { value: "quit", label: cliTFor(locale, "doctor.quit") },
     ],
     initialValue: "fix",
   });
@@ -1552,7 +1507,7 @@ async function applyFixWithReport(
   dryRun: boolean,
 ): Promise<DiagnosticFixResult> {
   if (dryRun) {
-    p.log.info(`[dry-run] would: ${d.fixPreview}`);
+    p.log.info(cliT("doctor.dryRunWould", { preview: d.fixPreview }));
     return { ok: true, message: "(dry-run)" };
   }
   const result = await d.fix(ctx);
@@ -1565,30 +1520,37 @@ async function applyFixWithReport(
 }
 
 async function runDoctor() {
-  p.intro("agentmemory doctor");
+  const locale = currentCliLocale();
+  p.intro(cliTFor(locale, "doctor.intro"));
   const applyAll = args.includes("--all");
   const dryRun = args.includes("--dry-run");
   if (applyAll && dryRun) {
-    p.log.error("Cannot combine --all and --dry-run.");
+    p.log.error(cliTFor(locale, "doctor.cannotAllDryRun"));
     process.exit(2);
   }
 
   // Passive server checks (informational).
-  const passive = await passiveServerChecks();
+  const passive = await passiveServerChecks(locale);
   const passivePassed = passive.filter((c) => c.ok).length;
-  p.note(formatChecks(passive), `server: ${passivePassed}/${passive.length} passing`);
+  p.note(
+    formatChecks(passive),
+    cliTFor(locale, "doctor.serverSummary", {
+      passed: passivePassed,
+      total: passive.length,
+    }),
+  );
 
   // Doctor v2 interactive catalog.
   const ctx = buildDoctorContext();
   const effects = buildDoctorEffects();
-  const diagnostics = buildDiagnostics(effects);
+  const diagnostics = buildDiagnostics(effects, locale);
 
   if (dryRun) {
     const results: Array<{ diagnostic: Diagnostic; status: { ok: boolean; detail?: string } }> = [];
     for (const d of diagnostics) results.push({ diagnostic: d, status: await d.check(ctx) });
-    const lines = dryRunPlan(ctx, results);
-    p.note(lines.join("\n"), "dry-run plan");
-    p.outro("Dry-run complete. Re-run without --dry-run to apply.");
+    const lines = dryRunPlan(ctx, results, locale);
+    p.note(lines.join("\n"), cliTFor(locale, "doctor.dryRunPlan"));
+    p.outro(cliTFor(locale, "doctor.dryRunComplete"));
     return;
   }
 
@@ -1609,10 +1571,10 @@ async function runDoctor() {
     }
     failed++;
     p.log.warn(`${d.id} ✗ ${status.detail ?? ""}`.trim());
-    p.log.info(`why: ${d.fixPreview}`);
+    p.log.info(cliTFor(locale, "doctor.why", { preview: d.fixPreview }));
 
     if (d.manualOnly) {
-      p.log.info(`(manual fix only — see "${d.id}" docs)`);
+      p.log.info(cliTFor(locale, "doctor.manualOnly", { id: d.id }));
     }
 
     if (applyAll) {
@@ -1620,7 +1582,7 @@ async function runDoctor() {
       if (r.ok) fixed++;
       // Re-check only this diagnostic.
       const after = await d.check(ctx);
-      if (!after.ok) p.log.warn(`${d.id} still failing after fix.`);
+      if (!after.ok) p.log.warn(cliTFor(locale, "doctor.stillFailing", { id: d.id }));
       continue;
     }
 
@@ -1634,7 +1596,10 @@ async function runDoctor() {
           if (after.ok) {
             fixed++;
           } else {
-            p.log.warn(`${d.id} still failing after fix: ${after.detail ?? ""}`);
+            p.log.warn(cliTFor(locale, "doctor.stillFailingDetail", {
+              id: d.id,
+              detail: after.detail ?? "",
+            }));
           }
         }
         break;
@@ -1654,17 +1619,22 @@ async function runDoctor() {
     }
   }
 
-  const summary = `${diagnostics.length} checks · ${failed} failing · ${fixed} fixed · ${skipped} skipped`;
+  const summary = cliTFor(locale, "doctor.summary", {
+    total: diagnostics.length,
+    failed,
+    fixed,
+    skipped,
+  });
   if (quit) {
-    p.outro(`Quit early. ${summary}`);
+    p.outro(cliTFor(locale, "doctor.quitEarly", { summary }));
     process.exit(1);
   }
   if (failed === 0) {
-    p.outro("All diagnostics passing. agentmemory is healthy.");
+    p.outro(cliTFor(locale, "doctor.allPassing"));
     return;
   }
   if (failed - fixed === 0) {
-    p.outro(`All fixes applied. ${summary}`);
+    p.outro(cliTFor(locale, "doctor.allFixesApplied", { summary }));
     return;
   }
   p.outro(summary);
@@ -1685,7 +1655,65 @@ type DemoSession = {
 
 type SearchResult = { query: string; hits: number; topTitle: string };
 
-function buildDemoSessions(): DemoSession[] {
+function buildDemoSessions(locale: Locale = "en"): DemoSession[] {
+  if (locale === "zh-CN") {
+    return [
+      {
+        id: generateId("demo"),
+        title: "会话 1: JWT auth setup",
+        observations: [
+          {
+            toolName: "Write",
+            toolInput: { file_path: "src/middleware/auth.ts" },
+            toolOutput:
+              "使用 jose library 创建了 JWT middleware。Tokens 30 天后过期。为了 Edge compatibility，选择 jose 而不是 jsonwebtoken。",
+          },
+          {
+            toolName: "Write",
+            toolInput: { file_path: "test/auth.test.ts" },
+            toolOutput:
+              "添加了 token validation tests，覆盖 expired、malformed 和 valid cases。",
+          },
+          {
+            toolName: "Bash",
+            toolInput: { command: "npm test" },
+            toolOutput: "全部 12 个 auth tests 通过。",
+          },
+        ],
+      },
+      {
+        id: generateId("demo"),
+        title: "会话 2: Database migration debugging",
+        observations: [
+          {
+            toolName: "Read",
+            toolInput: { file_path: "prisma/schema.prisma" },
+            toolOutput:
+              "发现 user relations 中存在 N+1 query 问题。需要在 posts query 上添加 include。",
+          },
+          {
+            toolName: "Edit",
+            toolInput: { file_path: "src/api/users.ts" },
+            toolOutput:
+              "通过添加 Prisma include 修复 N+1。Query time 从 450ms 降到 28ms。",
+          },
+        ],
+      },
+      {
+        id: generateId("demo"),
+        title: "会话 3: Rate limiting",
+        observations: [
+          {
+            toolName: "Write",
+            toolInput: { file_path: "src/middleware/ratelimit.ts" },
+            toolOutput:
+              "添加了 rate limiting middleware，默认 100 req/min。开发环境使用 in-memory store，生产环境使用 Redis。",
+          },
+        ],
+      },
+    ];
+  }
+
   return [
     {
       id: generateId("demo"),
@@ -1863,13 +1891,12 @@ function findEnvExample(): string | null {
 }
 
 async function runInit() {
-  p.intro("agentmemory init");
+  const locale = currentCliLocale();
+  p.intro(cliTFor(locale, "init.intro"));
   const target = join(homedir(), ".agentmemory", ".env");
   const template = findEnvExample();
   if (!template) {
-    p.log.error(
-      "Could not locate .env.example in the package. Re-install with: npm i -g @agentmemory/agentmemory",
-    );
+    p.log.error(cliTFor(locale, "init.missingTemplate"));
     process.exit(1);
   }
   const dir = dirname(target);
@@ -1886,58 +1913,48 @@ async function runInit() {
     await copyFile(template, target, fsConstants.COPYFILE_EXCL);
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code === "EEXIST") {
-      p.log.warn(`${target} already exists — leaving it untouched.`);
-      p.log.info(
-        `Compare against the latest template: diff ${target} ${template}`,
-      );
-      p.outro("Nothing changed.");
+      p.log.warn(cliTFor(locale, "init.alreadyExists", { target }));
+      p.log.info(cliTFor(locale, "init.compareTemplate", { target, template }));
+      p.outro(cliTFor(locale, "common.nothingChanged"));
       return;
     }
-    p.log.error(
-      `Failed to copy template: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    p.log.error(cliTFor(locale, "init.copyFailed", {
+      message: err instanceof Error ? err.message : String(err),
+    }));
     process.exit(1);
   }
-  p.log.success(`Wrote ${target}`);
-  p.note(
-    [
-      "All keys are commented out by default. Uncomment the ones you want.",
-      "",
-      "Common next steps:",
-      "  1. Pick an LLM provider key (ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / etc.)",
-      "  2. Run `npx @agentmemory/agentmemory doctor` to verify the daemon sees them",
-      "  3. Run `npx @agentmemory/agentmemory` to start the worker",
-    ].join("\n"),
-    "Next steps",
-  );
-  p.outro(`Edit ${target} and you're set.`);
+  p.log.success(cliTFor(locale, "init.wrote", { target }));
+  p.note(cliTFor(locale, "init.note"), cliTFor(locale, "init.noteTitle"));
+  p.outro(cliTFor(locale, "init.outro", { target }));
 }
 
 async function runDemo() {
+  const locale = currentCliLocale();
   const port = getRestPort();
   const base = `http://localhost:${port}`;
-  p.intro("agentmemory demo");
+  p.intro(cliTFor(locale, "demo.intro"));
 
   if (!(await isAgentmemoryReady())) {
-    p.log.error(
-      `agentmemory worker not reachable on port ${port} (livez probe failed). Something may be on the port but it isn't serving /agentmemory/*.`,
-    );
-    p.log.info("Start it with: npx @agentmemory/agentmemory");
+    p.log.error(cliTFor(locale, "demo.notReachable", { port }));
+    p.log.info(cliTFor(locale, "common.startWith"));
     process.exit(1);
   }
 
   const demoProject = "/tmp/agentmemory-demo";
-  const sessions = buildDemoSessions();
+  const sessions = buildDemoSessions(locale);
 
   const sSeed = p.spinner();
-  sSeed.start("Seeding 3 demo sessions with realistic observations...");
+  sSeed.start(cliTFor(locale, "demo.seedStart"));
 
   let totalObs = 0;
   for (const session of sessions) {
     totalObs += await seedDemoSession(base, demoProject, session);
   }
 
-  sSeed.stop(`Seeded ${totalObs} observations across ${sessions.length} sessions`);
+  sSeed.stop(cliTFor(locale, "demo.seedStop", {
+    total: totalObs,
+    sessions: sessions.length,
+  }));
 
   const queries = [
     "jwt auth middleware",
@@ -1946,41 +1963,50 @@ async function runDemo() {
   ];
 
   const sQuery = p.spinner();
-  sQuery.start(`Running ${queries.length} smart-search queries...`);
+  sQuery.start(cliTFor(locale, "demo.queryStart", { count: queries.length }));
 
   const results: SearchResult[] = [];
   for (const query of queries) {
     results.push(await runDemoSearch(base, query));
   }
 
-  sQuery.stop("Search complete");
+  sQuery.stop(cliTFor(locale, "demo.queryStop"));
 
   const lines = [
-    `Project:       ${demoProject}`,
-    `Sessions:      ${sessions.length} seeded (${totalObs} observations)`,
+    `${cliTFor(locale, "demo.project")}:       ${demoProject}`,
+    `${cliTFor(locale, "demo.sessions")}:      ${cliTFor(locale, "demo.sessionSummary", {
+      sessions: sessions.length,
+      observations: totalObs,
+    })}`,
     "",
-    "Search results:",
+    `${cliTFor(locale, "demo.searchResults")}:`,
     ...results.flatMap((r) => [
       `  "${r.query}"`,
-      `    → ${r.hits} hit(s), top: ${r.topTitle.slice(0, 60)}`,
+      cliTFor(locale, "demo.hitLine", {
+        hits: r.hits,
+        title: r.topTitle.slice(0, 60),
+      }),
     ]),
     "",
-    `Notice: searching "database performance optimization"`,
-    `found the N+1 query fix — keyword matching can't do that.`,
+    cliTFor(locale, "demo.notice"),
+    cliTFor(locale, "demo.noticeDetail"),
     "",
-    `Viewer:        ${getViewerUrl()}`,
-    `Clean up with: curl -X DELETE "${base}/agentmemory/sessions?project=${demoProject}"`,
+    `${cliTFor(locale, "demo.viewer")}:        ${getViewerUrl()}`,
+    `${cliTFor(locale, "demo.cleanup")}: curl -X DELETE "${base}/agentmemory/sessions?project=${demoProject}"`,
   ];
 
-  p.note(lines.join("\n"), "demo complete");
-  p.log.success("agentmemory is working. Point your agent at it and get back to coding.");
+  p.note(lines.join("\n"), cliTFor(locale, "demo.noteTitle"));
+  p.log.success(cliTFor(locale, "demo.success"));
 }
 
 function runCommand(
   command: string,
   commandArgs: string[],
-  options: { cwd?: string; label: string; optional?: boolean } = { label: "command" },
+  options: { cwd?: string; label: string; optional?: boolean } = {
+    label: cliT("command.defaultLabel"),
+  },
 ): boolean {
+  const locale = currentCliLocale();
   const spinner = p.spinner();
   spinner.start(options.label);
   const result = spawnSync(command, commandArgs, {
@@ -1996,10 +2022,10 @@ function runCommand(
 
   const stderr = (result.stderr || "").toString().trim();
   const stdout = (result.stdout || "").toString().trim();
-  const msg = stderr || stdout || "unknown error";
+  const msg = stderr || stdout || cliTFor(locale, "command.unknownError");
 
   if (options.optional) {
-    spinner.stop(`${options.label} (skipped)`);
+    spinner.stop(`${options.label} (${cliTFor(locale, "command.skippedSuffix")})`);
     p.log.warn(msg.slice(0, 300));
     return false;
   }
@@ -2010,7 +2036,8 @@ function runCommand(
 }
 
 async function runUpgrade() {
-  p.intro("agentmemory upgrade");
+  const locale = currentCliLocale();
+  p.intro(cliTFor(locale, "upgrade.intro"));
 
   const cwd = process.cwd();
   const hasPackageJson = existsSync(join(cwd, "package.json"));
@@ -2020,10 +2047,10 @@ async function runUpgrade() {
   const npmBin = whichBinary("npm");
   const dockerBin = whichBinary("docker");
 
-  p.log.info(`Working directory: ${cwd}`);
+  p.log.info(cliTFor(locale, "upgrade.workingDirectory", { cwd }));
   const requireSuccess = (ok: boolean, label: string): void => {
     if (!ok) {
-      p.log.error(`Upgrade aborted: ${label} failed.`);
+      p.log.error(cliTFor(locale, "upgrade.aborted", { label }));
       process.exit(1);
     }
   };
@@ -2032,62 +2059,55 @@ async function runUpgrade() {
     const usePnpm = !!pnpmBin && hasPnpmLock;
     if (usePnpm && pnpmBin) {
       const installOk = runCommand(pnpmBin, ["install"], {
-        label: "Refreshing dependencies (pnpm install)",
+        label: cliTFor(locale, "upgrade.refreshDependenciesPnpm"),
       });
       requireSuccess(installOk, "pnpm install");
       runCommand(pnpmBin, ["up", "iii-sdk@0.11.2"], {
-        label: "Pinning iii-sdk@0.11.2",
+        label: cliTFor(locale, "upgrade.pinningIiiSdk"),
         optional: true,
       });
     } else if (npmBin) {
       const installOk = runCommand(npmBin, ["install"], {
-        label: "Refreshing dependencies (npm install)",
+        label: cliTFor(locale, "upgrade.refreshDependenciesNpm"),
       });
       requireSuccess(installOk, "npm install");
       runCommand(npmBin, ["install", "iii-sdk@0.11.2"], {
-        label: "Pinning iii-sdk@0.11.2",
+        label: cliTFor(locale, "upgrade.pinningIiiSdk"),
         optional: true,
       });
     } else {
-      p.log.warn("No package manager found (pnpm/npm). Skipping JS dependency upgrade.");
+      p.log.warn(cliTFor(locale, "upgrade.noPackageManager"));
     }
   } else {
-    p.log.warn("No package.json in current directory. Skipping JS dependency upgrade.");
+    p.log.warn(cliTFor(locale, "upgrade.noPackageJson"));
   }
 
   const upgradeEngine = await p.confirm({
-    message: "Re-run the iii-engine install script (curl | sh)?",
+    message: cliTFor(locale, "upgrade.rerunInstaller"),
     initialValue: true,
   });
   if (p.isCancel(upgradeEngine)) {
-    p.cancel("Cancelled.");
+    p.cancel(cliTFor(locale, "upgrade.cancelled"));
     return process.exit(0);
   }
   if (upgradeEngine === true) {
     await runIiiInstaller();
   } else {
-    p.log.info("Skipped iii-engine installer.");
+    p.log.info(cliTFor(locale, "upgrade.installerSkipped"));
   }
 
   if (dockerBin) {
     runCommand(dockerBin, ["pull", `iiidev/iii:${IIPINNED_VERSION}`], {
-      label: `Pulling iii Docker image v${IIPINNED_VERSION} (pinned)`,
+      label: cliTFor(locale, "upgrade.pullingDockerImage", { version: IIPINNED_VERSION }),
       optional: true,
     });
   } else {
-    p.log.info("Docker not found. Skipping Docker image refresh.");
+    p.log.info(cliTFor(locale, "upgrade.dockerMissing"));
   }
 
   p.note(
-    [
-      "Upgrade flow completed.",
-      "",
-      "Recommended next steps:",
-      "  1) agentmemory status",
-      "  2) npm/pnpm test",
-      "  3) restart agentmemory process",
-    ].join("\n"),
-    "agentmemory upgrade",
+    cliTFor(locale, "upgrade.note"),
+    cliTFor(locale, "upgrade.noteTitle"),
   );
 }
 
@@ -2111,7 +2131,7 @@ async function signalAndWait(
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code === "ESRCH") return true;
     if (code === "EPERM") {
-      p.log.warn(`No permission to signal pid ${pid}. Try: kill ${pid}`);
+      p.log.warn(cliTFor(currentCliLocale(), "stop.noPermission", { pid }));
       return false;
     }
     vlog(`${initialSignal} ${pid}: ${err instanceof Error ? err.message : String(err)}`);
@@ -2160,16 +2180,17 @@ function findEnginePidsByPort(port: number): number[] {
 }
 
 async function stopDockerEngine(composeFile: string, port: number): Promise<void> {
+  const locale = currentCliLocale();
   const dockerBin = whichBinary("docker");
   if (!dockerBin) {
     p.log.error(
-      `Engine was started via Docker compose, but \`docker\` is no longer on PATH. Stop it manually:\n  docker compose -f ${composeFile} down`,
+      cliTFor(locale, "stop.dockerMissing", { composeFile }),
     );
     process.exit(1);
   }
   if (!existsSync(composeFile)) {
     p.log.error(
-      `Engine state references ${composeFile}, but the file is gone. Stop it manually:\n  docker compose down  (from the dir holding the original docker-compose.yml)`,
+      cliTFor(locale, "stop.dockerStateMissing", { composeFile }),
     );
     process.exit(1);
   }
@@ -2181,15 +2202,16 @@ async function stopDockerEngine(composeFile: string, port: number): Promise<void
   clearWorkerPidfile();
   if (!ok) {
     p.log.error(
-      `docker compose down failed. The engine may still be running on :${port}. Inspect with:\n  docker compose -f ${composeFile} ps`,
+      cliTFor(locale, "stop.dockerDownFailed", { port, composeFile }),
     );
     process.exit(1);
   }
-  p.outro("Stopped. Memories persisted to disk; restart anytime with: npx @agentmemory/agentmemory");
+  p.outro(cliTFor(locale, "stop.stopped"));
 }
 
 async function runStop(): Promise<void> {
-  p.intro("agentmemory stop");
+  const locale = currentCliLocale();
+  p.intro(cliTFor(locale, "stop.intro"));
   const port = getRestPort();
   const state = readEngineState();
   const running = await isEngineRunning();
@@ -2197,11 +2219,11 @@ async function runStop(): Promise<void> {
 
   if (state?.kind === "docker") {
     if (!running) {
-      p.log.info(`No engine responding on port ${port}.`);
+      p.log.info(cliTFor(locale, "stop.noEngineOnPort", { port }));
       clearEnginePidfile();
       clearEngineState();
       clearWorkerPidfile();
-      p.outro("Nothing to stop.");
+      p.outro(cliTFor(locale, "stop.nothingToStop"));
       return;
     }
     await stopDockerEngine(state.composeFile, port);
@@ -2220,34 +2242,43 @@ async function runStop(): Promise<void> {
       clearEnginePidfile();
       clearEngineState();
       clearWorkerPidfile();
-      p.outro("Nothing to stop.");
+      p.outro(cliTFor(locale, "stop.nothingToStop"));
       return;
     }
     if (workerPid !== null && portPids.length === 0 && pidfilePid === null) {
       // Engine already gone but worker is lingering — reap it directly
       // instead of preserving for manual cleanup.
       const s = p.spinner();
-      s.start(`Stopping orphaned agentmemory worker (pid ${workerPid})...`);
+      s.start(cliTFor(locale, "stop.stoppingOrphanWorker", { pid: workerPid }));
       const ok = await signalAndWait(workerPid, "SIGTERM", 3000);
-      s.stop(ok ? `Stopped worker pid ${workerPid}` : `Failed to stop worker pid ${workerPid}`);
+      s.stop(ok
+        ? cliTFor(locale, "stop.stoppedWorkerPid", { pid: workerPid })
+        : cliTFor(locale, "stop.failedWorkerPid", { pid: workerPid }));
       clearEnginePidfile();
       clearEngineState();
       clearWorkerPidfile();
       if (!ok) {
-        p.log.error(`Worker pid ${workerPid} survived SIGKILL. Investigate with \`ps\`.`);
+        p.log.error(cliTFor(locale, "stop.workerSurvived", { pid: workerPid }));
         process.exit(1);
       }
-      p.outro("Stopped orphaned worker. Memories persisted to disk.");
+      p.outro(cliTFor(locale, "stop.stoppedOrphanWorker"));
       return;
     }
     const survivors = new Set<number>(portPids);
     if (pidfilePid) survivors.add(pidfilePid);
     if (workerPid) survivors.add(workerPid);
     p.log.warn(
-      `Engine not responding on :${port}, but ${survivors.size} process(es) still hold the port or pidfile: ${[...survivors].join(", ")}`,
+      cliTFor(locale, "stop.engineNotRespondingButProcesses", {
+        port,
+        count: survivors.size,
+        pids: [...survivors].join(", "),
+      }),
     );
     p.log.info(
-      `Preserving ~/.agentmemory/iii.pid + worker.pid. Investigate before manual cleanup:\n  ps -p ${[...survivors].join(",")} -o pid,ppid,comm,etime\n  ${IS_WINDOWS ? "netstat -ano | findstr :" + port : "lsof -i :" + port}`,
+      cliTFor(locale, "stop.preservingManualCleanup", {
+        pids: [...survivors].join(","),
+        diagnostic: IS_WINDOWS ? `netstat -ano | findstr :${port}` : `lsof -i :${port}`,
+      }),
     );
     process.exit(1);
   }
@@ -2257,11 +2288,11 @@ async function runStop(): Promise<void> {
     if (compose && pidfilePid === null) {
       if (force) {
         p.log.warn(
-          `--force: bypassing Docker-heuristic guard. Falling back to native pidfile + lsof on :${port}.`,
+          cliTFor(locale, "stop.forceBypass", { port }),
         );
       } else {
         p.log.error(
-          `Engine is running on :${port} but no pidfile or state file is present. It may have been started via Docker compose by a different shell. Refusing to signal host PIDs.\n\nStop it with:\n  docker compose -f ${compose} down\n\nOr re-run with --force to signal whatever lsof finds on :${port}, or AGENTMEMORY_USE_DOCKER=1 to record state next time.`,
+          cliTFor(locale, "stop.stateMissingGuard", { port, composeFile: compose }),
         );
         process.exit(1);
       }
@@ -2282,7 +2313,11 @@ async function runStop(): Promise<void> {
 
   if (candidates.size === 0 && workerCandidates.size === 0) {
     p.log.error(
-      `Could not locate engine process. Try:\n  ${IS_WINDOWS ? "netstat -ano | findstr :" + port : "lsof -i :" + port + " -t | xargs kill -9"}`,
+      cliTFor(locale, "stop.couldNotLocate", {
+        command: IS_WINDOWS
+          ? `netstat -ano | findstr :${port}`
+          : `lsof -i :${port} -t | xargs kill -9`,
+      }),
     );
     process.exit(1);
   }
@@ -2290,17 +2325,21 @@ async function runStop(): Promise<void> {
   let allStopped = true;
   for (const pid of candidates) {
     const s = p.spinner();
-    s.start(`Stopping iii-engine (pid ${pid})...`);
+    s.start(cliTFor(locale, "stop.stoppingEngine", { pid }));
     const ok = await signalAndWait(pid, "SIGTERM", 3000);
-    s.stop(ok ? `Stopped pid ${pid}` : `Failed to stop pid ${pid}`);
+    s.stop(ok
+      ? cliTFor(locale, "stop.stoppedPid", { pid })
+      : cliTFor(locale, "stop.failedPid", { pid }));
     if (!ok) allStopped = false;
   }
   for (const pid of workerCandidates) {
     if (candidates.has(pid)) continue;
     const s = p.spinner();
-    s.start(`Stopping agentmemory worker (pid ${pid})...`);
+    s.start(cliTFor(locale, "stop.stoppingWorker", { pid }));
     const ok = await signalAndWait(pid, "SIGTERM", 3000);
-    s.stop(ok ? `Stopped worker pid ${pid}` : `Failed to stop worker pid ${pid}`);
+    s.stop(ok
+      ? cliTFor(locale, "stop.stoppedWorkerPid", { pid })
+      : cliTFor(locale, "stop.failedWorkerPid", { pid }));
     if (!ok) allStopped = false;
   }
 
@@ -2308,10 +2347,10 @@ async function runStop(): Promise<void> {
   clearEngineState();
   clearWorkerPidfile();
   if (!allStopped) {
-    p.log.error("One or more processes survived SIGKILL. Investigate with `ps`.");
+    p.log.error(cliTFor(locale, "stop.processesSurvived"));
     process.exit(1);
   }
-  p.outro("Stopped. Memories persisted to disk; restart anytime with: npx @agentmemory/agentmemory");
+  p.outro(cliTFor(locale, "stop.stopped"));
 }
 
 async function runMcp(): Promise<void> {
@@ -2324,6 +2363,7 @@ async function runConnectCmd(): Promise<void> {
 }
 
 async function runImportJsonl(): Promise<void> {
+  const locale = currentCliLocale();
   // Long-form flags that take a value. Their value tokens must be
   // consumed alongside the flag so they don't leak into positional
   // args (e.g. `--port 3112 import-jsonl` would otherwise turn
@@ -2340,7 +2380,10 @@ async function runImportJsonl(): Promise<void> {
       if (Number.isInteger(parsed) && parsed > 0) {
         maxFiles = parsed;
       } else if (raw !== undefined) {
-        p.log.warn(`Ignoring --max-files ${raw}: expected a positive integer.`);
+        p.log.warn(cliTFor(locale, "importJsonl.badMaxFiles", {
+          flag: "--max-files",
+          value: raw,
+        }));
       }
       i++;
       continue;
@@ -2351,7 +2394,7 @@ async function runImportJsonl(): Promise<void> {
       if (Number.isInteger(parsed) && parsed > 0) {
         maxFiles = parsed;
       } else {
-        p.log.warn(`Ignoring --max-files=${raw}: expected a positive integer.`);
+        p.log.warn(cliTFor(locale, "importJsonl.badMaxFilesEquals", { value: raw }));
       }
       continue;
     }
@@ -2376,16 +2419,22 @@ async function runImportJsonl(): Promise<void> {
     probeOk = probe.ok;
     if (!probeOk) {
       const probeBody = await probe.text().catch(() => "");
-      probeDetail = `reachable but unhealthy (HTTP ${probe.status}${probeBody ? `: ${probeBody.slice(0, 200)}` : ""})`;
+      probeDetail = cliTFor(locale, "importJsonl.probeUnhealthy", {
+        status: probe.status,
+        body: probeBody ? `: ${probeBody.slice(0, 200)}` : "",
+      });
     }
   } catch (err) {
     probeOk = false;
     const msg = err instanceof Error ? err.message : String(err);
-    probeDetail = `unreachable (${msg})`;
+    probeDetail = cliTFor(locale, "importJsonl.probeUnreachable", { message: msg });
   }
   if (!probeOk) {
     p.log.error(
-      `agentmemory livez probe failed on port ${port}: ${probeDetail}. Start it with \`npx @agentmemory/agentmemory\` in another terminal, then re-run this command.`,
+      cliTFor(locale, "importJsonl.probeFailed", {
+        port,
+        detail: probeDetail,
+      }),
     );
     process.exit(1);
   }
@@ -2398,9 +2447,11 @@ async function runImportJsonl(): Promise<void> {
   const secret = process.env["AGENTMEMORY_SECRET"];
   if (secret) headers["authorization"] = `Bearer ${secret}`;
 
-  p.log.info(`Importing JSONL from ${pathArg || "~/.claude/projects"}…`);
+  p.log.info(cliTFor(locale, "importJsonl.importing", {
+    path: pathArg || "~/.claude/projects",
+  }));
   const spinner = p.spinner();
-  spinner.start("scanning files");
+  spinner.start(cliTFor(locale, "importJsonl.scanning"));
 
   try {
     const res = await fetch(`${base}/agentmemory/replay/import-jsonl`, {
@@ -2426,29 +2477,32 @@ async function runImportJsonl(): Promise<void> {
       try {
         json = JSON.parse(text);
       } catch {
-        spinner.stop("failed");
+        spinner.stop(cliTFor(locale, "importJsonl.failed"));
         p.log.error(
-          `server returned non-JSON response (HTTP ${res.status}): ${text.slice(0, 200)}`,
+          cliTFor(locale, "importJsonl.nonJson", {
+            status: res.status,
+            body: text.slice(0, 200),
+          }),
         );
         process.exit(1);
       }
     }
     if (!res.ok || json.success !== true) {
-      spinner.stop("failed");
+      spinner.stop(cliTFor(locale, "importJsonl.failed"));
       const detail =
         json.error ||
         (text.length === 0
-          ? "empty response body"
+          ? cliTFor(locale, "importJsonl.emptyResponseBody")
           : json.success === undefined
-            ? `HTTP ${res.status} (response missing success field)`
+            ? cliTFor(locale, "importJsonl.missingSuccessField", { status: res.status })
             : `HTTP ${res.status}`);
       if (res.status === 401) {
         p.log.error(
-          `${detail}. Set AGENTMEMORY_SECRET to match the server's secret and re-run.`,
+          cliTFor(locale, "importJsonl.secretMismatch", { detail }),
         );
       } else if (res.status === 404) {
         p.log.error(
-          `${detail}. The running agentmemory server does not expose /agentmemory/replay/import-jsonl — upgrade to v0.8.13 or later.`,
+          cliTFor(locale, "importJsonl.endpointMissing", { detail }),
         );
       } else {
         p.log.error(detail);
@@ -2456,7 +2510,11 @@ async function runImportJsonl(): Promise<void> {
       process.exit(1);
     }
     spinner.stop(
-      `imported ${json.imported ?? 0} file(s), ${json.observations ?? 0} observation(s) across ${json.sessionIds?.length || 0} session(s)`,
+      cliTFor(locale, "importJsonl.importedSummary", {
+        files: json.imported ?? 0,
+        observations: json.observations ?? 0,
+        sessions: json.sessionIds?.length || 0,
+      }),
     );
     if (json.truncated) {
       const cap = json.maxFiles ?? 200;
@@ -2464,16 +2522,22 @@ async function runImportJsonl(): Promise<void> {
       const discovered = json.discovered ?? 0;
       const skipped = discovered - (json.imported ?? 0);
       const discoveredLabel = json.traversalCapped
-        ? `${discovered}+ (traversal halted at safety cap)`
+        ? cliTFor(locale, "importJsonl.traversalHalted", { count: discovered })
         : String(discovered);
-      const baseMsg = `Hit the ${cap}-file scan cap; ${skipped} of ${discoveredLabel} discovered file(s) were skipped.`;
+      const baseMsg = cliTFor(locale, "importJsonl.scanCapBase", {
+        cap,
+        skipped,
+        discovered: discoveredLabel,
+      });
       // If we already saw more than the server's hard cap (or the
       // walker stopped early), bumping --max-files won't help on its
       // own — recommend batching by subdirectory.
       if (discovered > upper || json.traversalCapped) {
         p.log.warn(
-          `${baseMsg} Tree exceeds the server's --max-files limit of ${upper}; ` +
-            `batch by subdirectory (run import-jsonl once per project under ~/.claude/projects).`,
+          cliTFor(locale, "importJsonl.scanCapBatch", {
+            baseMsg,
+            upper,
+          }),
         );
       } else {
         const suggested = Math.min(
@@ -2481,17 +2545,21 @@ async function runImportJsonl(): Promise<void> {
           upper,
         );
         p.log.warn(
-          `${baseMsg} Re-run with --max-files=${suggested} (max ${upper}) or batch by subdirectory.`,
+          cliTFor(locale, "importJsonl.scanCapRerun", {
+            baseMsg,
+            suggested,
+            upper,
+          }),
         );
       }
     }
     if (json.sessionIds && json.sessionIds.length > 0) {
-      p.log.info(`View at ${getViewerUrl()} → Replay tab`);
+      p.log.info(cliTFor(locale, "importJsonl.viewReplay", { url: getViewerUrl() }));
     }
   } catch (err) {
-    spinner.stop("failed");
+    spinner.stop(cliTFor(locale, "importJsonl.failed"));
     if (err instanceof Error && err.name === "TimeoutError") {
-      p.log.error("import timed out after 2 minutes");
+      p.log.error(cliTFor(locale, "importJsonl.timedOut"));
     } else {
       p.log.error(err instanceof Error ? err.message : String(err));
     }
@@ -2526,26 +2594,92 @@ function probeLocalBinIiiVersion(home: string): string | null {
   return iiiBinVersion(path);
 }
 
-function safeDelete(path: string): { ok: boolean; message: string } {
+function humanBytesForCli(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function removePlanDescription(
+  item: RemovePlanItem,
+  locale: Locale,
+  localBinIiiVersion: string | null,
+): string {
+  switch (item.id) {
+    case "stop-engine":
+      return cliTFor(locale, "remove.planStopEngine");
+    case "pidfile":
+      return cliTFor(locale, "remove.planPidfile");
+    case "engine-state":
+      return cliTFor(locale, "remove.planEngineState");
+    case "env":
+      return cliTFor(locale, "remove.planEnv");
+    case "preferences":
+      return cliTFor(locale, "remove.planPreferences");
+    case "backups":
+      return cliTFor(locale, "remove.planBackups");
+    case "local-bin-iii":
+      return item.alwaysAsk
+        ? cliTFor(locale, "remove.planLocalBinIiiMismatch", {
+          version: localBinIiiVersion ?? "unknown",
+          pinnedVersion: IIPINNED_VERSION,
+        })
+        : cliTFor(locale, "remove.planLocalBinIiiMatched", {
+          pinnedVersion: IIPINNED_VERSION,
+        });
+    case "data-dir":
+      return cliTFor(locale, "remove.planDataDir");
+    default:
+      if (item.id.startsWith("connect:")) {
+        const agent = item.description.match(/\(([^)]+)\)/)?.[1] ?? "unknown";
+        return cliTFor(locale, "remove.planConnect", { agent });
+      }
+      return cliTFor(locale, "remove.planFallback", { description: item.description });
+  }
+}
+
+function formatLocalizedRemovePlan(
+  plan: RemovePlanItem[],
+  locale: Locale,
+  localBinIiiVersion: string | null,
+): string {
+  return plan
+    .filter((item) => item.applicable)
+    .map((item, index) => {
+      const tag = item.alwaysAsk ? cliTFor(locale, "remove.planAsksTag") : "";
+      const size = item.sizeBytes > 0 ? ` (${humanBytesForCli(item.sizeBytes)})` : "";
+      const path = item.path ? `\n     ${item.path}` : "";
+      return `  ${index + 1}. ${removePlanDescription(item, locale, localBinIiiVersion)}${tag}${size}${path}`;
+    })
+    .join("\n");
+}
+
+function safeDelete(path: string, locale: Locale = currentCliLocale()): { ok: boolean; message: string } {
   try {
-    if (!existsSync(path)) return { ok: true, message: `not present (${path})` };
+    if (!existsSync(path)) {
+      return { ok: true, message: cliTFor(locale, "remove.notPresent", { path }) };
+    }
     const st = statSync(path);
     if (st.isDirectory()) {
       rmSync(path, { recursive: true, force: true });
     } else {
       unlinkSync(path);
     }
-    return { ok: true, message: `deleted ${path}` };
+    return { ok: true, message: cliTFor(locale, "remove.deleted", { path }) };
   } catch (err) {
     return {
       ok: false,
-      message: `failed ${path}: ${err instanceof Error ? err.message : String(err)}`,
+      message: cliTFor(locale, "remove.failedDelete", {
+        path,
+        message: err instanceof Error ? err.message : String(err),
+      }),
     };
   }
 }
 
 async function runRemove(): Promise<void> {
-  p.intro("agentmemory remove");
+  const locale = currentCliLocale();
+  p.intro(cliTFor(locale, "remove.intro"));
   const force = args.includes("--force");
   const keepData = args.includes("--keep-data");
 
@@ -2566,27 +2700,30 @@ async function runRemove(): Promise<void> {
 
   const applicable = plan.filter((it) => it.applicable);
   if (applicable.length === 0) {
-    p.outro("Nothing to remove. agentmemory is already gone.");
+    p.outro(cliTFor(locale, "remove.alreadyGone"));
     return;
   }
 
-  p.note(formatPlan(plan), "destruction plan");
+  p.note(
+    formatLocalizedRemovePlan(plan, locale, localBinIiiVersion),
+    cliTFor(locale, "remove.planTitle"),
+  );
 
   if (!force) {
     const proceed = await p.confirm({
-      message: "Proceed with these deletions?",
+      message: cliTFor(locale, "remove.proceed"),
       initialValue: false,
     });
     if (p.isCancel(proceed) || proceed !== true) {
-      p.cancel("Cancelled. Nothing was deleted.");
+      p.cancel(cliTFor(locale, "remove.cancelled"));
       return;
     }
     const sure = await p.confirm({
-      message: "This is irreversible. Continue?",
+      message: cliTFor(locale, "remove.irreversible"),
       initialValue: false,
     });
     if (p.isCancel(sure) || sure !== true) {
-      p.cancel("Cancelled. Nothing was deleted.");
+      p.cancel(cliTFor(locale, "remove.cancelled"));
       return;
     }
   }
@@ -2597,11 +2734,14 @@ async function runRemove(): Promise<void> {
     // alwaysAsk items get a per-item confirmation even with --force.
     if (item.alwaysAsk) {
       const ok = await p.confirm({
-        message: `${item.description} — really delete${item.path ? ` ${item.path}` : ""}?`,
+        message: cliTFor(locale, "remove.reallyDelete", {
+          description: item.description,
+          path: item.path ? ` ${item.path}` : "",
+        }),
         initialValue: false,
       });
       if (p.isCancel(ok) || ok !== true) {
-        p.log.info(`skipped: ${item.id}`);
+        p.log.info(cliTFor(locale, "remove.skipped", { id: item.id }));
         continue;
       }
     }
@@ -2619,26 +2759,29 @@ async function runRemove(): Promise<void> {
         clearEngineState();
         p.log.success(
           cands.size > 0
-            ? `stopped engine (${cands.size} pid${cands.size === 1 ? "" : "s"})`
-            : "no engine running",
+            ? cliTFor(locale, "remove.stoppedEngine", {
+              count: cands.size,
+              pidLabel: cands.size === 1 ? "pid" : "pids",
+            })
+            : cliTFor(locale, "remove.noEngineRunning"),
         );
       } catch (err) {
         p.log.warn(
-          `engine stop best-effort: ${err instanceof Error ? err.message : String(err)}`,
+          cliTFor(locale, "remove.stopBestEffort", {
+            message: err instanceof Error ? err.message : String(err),
+          }),
         );
       }
       continue;
     }
 
     if (!item.path) continue;
-    const r = safeDelete(item.path);
+    const r = safeDelete(item.path, locale);
     if (r.ok) p.log.success(r.message);
     else p.log.error(r.message);
   }
 
-  p.outro(
-    "Done. agentmemory cleanly removed. The npm package itself: npm uninstall -g @agentmemory/agentmemory",
-  );
+  p.outro(cliTFor(locale, "remove.done"));
 }
 
 const commands: Record<string, () => Promise<void>> = {

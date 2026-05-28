@@ -1,4 +1,6 @@
 import type { RawObservation } from "../types.js";
+import { getLocale } from "../config.js";
+import { resolveLocale, t, type Locale } from "../i18n/index.js";
 
 export type TimelineEventKind =
   | "prompt"
@@ -58,22 +60,26 @@ function kindFromHook(obs: RawObservation): TimelineEventKind {
   }
 }
 
-function labelFor(obs: RawObservation, kind: TimelineEventKind): string {
+function labelFor(
+  obs: RawObservation,
+  kind: TimelineEventKind,
+  locale: Locale,
+): string {
   switch (kind) {
     case "prompt":
-      return truncate(obs.userPrompt || "User prompt", 80);
+      return truncate(obs.userPrompt || t(locale, "replay.userPrompt"), 80);
     case "response":
-      return truncate(obs.assistantResponse || "Assistant response", 80);
+      return truncate(obs.assistantResponse || t(locale, "replay.assistantResponse"), 80);
     case "tool_call":
-      return `${obs.toolName || "tool"} ▸ call`;
+      return `${obs.toolName || t(locale, "replay.toolFallback")} ▸ ${t(locale, "replay.toolCall")}`;
     case "tool_result":
-      return `${obs.toolName || "tool"} ▸ result`;
+      return `${obs.toolName || t(locale, "replay.toolFallback")} ▸ ${t(locale, "replay.toolResult")}`;
     case "tool_error":
-      return `${obs.toolName || "tool"} ▸ error`;
+      return `${obs.toolName || t(locale, "replay.toolFallback")} ▸ ${t(locale, "replay.toolError")}`;
     case "session_start":
-      return "Session start";
+      return t(locale, "replay.sessionStart");
     case "session_end":
-      return "Session end";
+      return t(locale, "replay.sessionEnd");
     default:
       return obs.hookType;
   }
@@ -100,7 +106,11 @@ function estimateDurationMs(ev: TimelineEvent): number {
   return Math.max(MIN_EVENT_MS, Math.min(MAX_EVENT_MS, ms));
 }
 
-export function projectTimeline(observations: RawObservation[]): Timeline {
+export function projectTimeline(
+  observations: RawObservation[],
+  rawLocale: string = getLocale(),
+): Timeline {
+  const locale = resolveLocale(rawLocale);
   if (observations.length === 0) {
     const now = new Date().toISOString();
     return {
@@ -141,7 +151,7 @@ export function projectTimeline(observations: RawObservation[]): Timeline {
       offsetMs,
       durationMs: 0,
       kind,
-      label: labelFor(obs, kind),
+      label: labelFor(obs, kind, locale),
       body,
       toolName: obs.toolName,
       toolInput: obs.toolInput,

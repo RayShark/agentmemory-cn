@@ -1,4 +1,6 @@
-export const REFLECT_SYSTEM = `You are a higher-order reasoning engine. Given a cluster of related concepts, facts, lessons, and action outcomes, synthesize cross-cutting insights that span multiple individual memories.
+import { languageInstruction, t, type Locale } from "../i18n/index.js";
+
+const REFLECT_SYSTEM_BASE = `You are a higher-order reasoning engine. Given a cluster of related concepts, facts, lessons, and action outcomes, synthesize cross-cutting insights that span multiple individual memories.
 
 Output format (XML):
 <insights>
@@ -16,19 +18,28 @@ Rules:
 - Skip insights that merely restate a single source item
 - Always emit confidence attribute before title attribute`;
 
+export function buildReflectSystem(locale: Locale = "en"): string {
+  const instruction = languageInstruction(locale);
+  return instruction ? `${REFLECT_SYSTEM_BASE}\n\nLanguage:\n- ${instruction}` : REFLECT_SYSTEM_BASE;
+}
+
+export const REFLECT_SYSTEM = buildReflectSystem();
+
 export function buildReflectPrompt(cluster: {
   concepts: string[];
   facts: Array<{ fact: string; confidence: number }>;
   lessons: Array<{ content: string; confidence: number }>;
   crystalNarratives: string[];
-}): string {
+}, locale: Locale = "en"): string {
   const sections: string[] = [];
 
-  sections.push(`## Concept Cluster: ${cluster.concepts.join(", ")}`);
+  sections.push(
+    `## ${t(locale, "reflect.conceptCluster")}: ${cluster.concepts.join(", ")}`,
+  );
 
   if (cluster.facts.length > 0) {
     sections.push(
-      "\n## Known Facts",
+      `\n## ${t(locale, "reflect.knownFacts")}`,
       ...cluster.facts.map(
         (f) => `- [confidence=${f.confidence}] ${f.fact}`,
       ),
@@ -37,7 +48,7 @@ export function buildReflectPrompt(cluster: {
 
   if (cluster.lessons.length > 0) {
     sections.push(
-      "\n## Lessons Learned",
+      `\n## ${t(locale, "reflect.lessonsLearned")}`,
       ...cluster.lessons.map(
         (l) => `- [confidence=${l.confidence}] ${l.content}`,
       ),
@@ -46,10 +57,10 @@ export function buildReflectPrompt(cluster: {
 
   if (cluster.crystalNarratives.length > 0) {
     sections.push(
-      "\n## Completed Work Summaries",
+      `\n## ${t(locale, "reflect.completedWorkSummaries")}`,
       ...cluster.crystalNarratives.map((n) => `- ${n}`),
     );
   }
 
-  return `Synthesize higher-order insights from this cluster of related memories:\n\n${sections.join("\n")}`;
+  return `${t(locale, "reflect.promptLead")}\n\n${sections.join("\n")}`;
 }

@@ -133,7 +133,7 @@ describe("cli onboarding", () => {
     );
     expect(
       prompts.note.mock.calls.some((call) =>
-        String(call[0]).includes("BM25-only"),
+        String(call[0]).includes("仅 BM25"),
       ),
     ).toBe(true);
   });

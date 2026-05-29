@@ -10,6 +10,34 @@ type Pipeline = (
   ) => Promise<{ tolist: () => number[][] }>
 >;
 
+type TransformersModule = {
+  pipeline: Pipeline;
+  env?: {
+    remoteHost: string;
+    cacheDir: string | null;
+  };
+};
+
+export function resolveTransformersRemoteHost(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const raw =
+    env.AGENTMEMORY_TRANSFORMERS_REMOTE_HOST ||
+    env.TRANSFORMERS_REMOTE_HOST ||
+    env.HF_ENDPOINT;
+  const host = raw?.trim();
+  if (!host) return null;
+  return host.endsWith("/") ? host : `${host}/`;
+}
+
+export function resolveTransformersCacheDir(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const raw = env.AGENTMEMORY_TRANSFORMERS_CACHE_DIR || env.TRANSFORMERS_CACHE;
+  const cacheDir = raw?.trim();
+  return cacheDir || null;
+}
+
 export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly name = "local";
   readonly dimensions = 384;
@@ -33,7 +61,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   private async getExtractor() {
     if (this.extractor) return this.extractor;
 
-    let transformers: { pipeline: Pipeline };
+    let transformers: TransformersModule;
     try {
       // @ts-ignore - optional peer dependency
       transformers = await import("@xenova/transformers");
@@ -42,6 +70,11 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         "Install @xenova/transformers for local embeddings: npm install @xenova/transformers",
       );
     }
+
+    const remoteHost = resolveTransformersRemoteHost();
+    if (remoteHost && transformers.env) transformers.env.remoteHost = remoteHost;
+    const cacheDir = resolveTransformersCacheDir();
+    if (cacheDir && transformers.env) transformers.env.cacheDir = cacheDir;
 
     this.extractor = await transformers.pipeline(
       "feature-extraction",

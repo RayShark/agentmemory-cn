@@ -5,6 +5,7 @@ import { renderViewerDocument } from "../src/viewer/document.js";
 import {
   buildAllowedHosts,
   isHostAllowed,
+  resolveViewerListenHost,
   startViewerServer,
 } from "../src/viewer/server.js";
 
@@ -125,6 +126,26 @@ describe("viewer host allowlist (DNS rebinding defence)", () => {
       3113,
     );
     expect(isHostAllowed("localhost:3113", allowed)).toBe(true);
+  });
+});
+
+describe("viewer listen host", () => {
+  it("defaults to loopback", () => {
+    expect(resolveViewerListenHost({})).toBe("127.0.0.1");
+  });
+
+  it("honours AGENTMEMORY_VIEWER_HOST for LAN exposure", () => {
+    expect(resolveViewerListenHost({ AGENTMEMORY_VIEWER_HOST: "0.0.0.0" }))
+      .toBe("0.0.0.0");
+  });
+
+  it("falls back to VIEWER_HOST for compatibility", () => {
+    expect(resolveViewerListenHost({ VIEWER_HOST: "::" })).toBe("::");
+  });
+
+  it("treats blank host overrides as loopback", () => {
+    expect(resolveViewerListenHost({ AGENTMEMORY_VIEWER_HOST: "  " }))
+      .toBe("127.0.0.1");
   });
 });
 

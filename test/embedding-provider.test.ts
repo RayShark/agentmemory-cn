@@ -6,6 +6,10 @@ import {
 import { detectEmbeddingProvider, loadEmbeddingConfig } from "../src/config.js";
 import { GeminiEmbeddingProvider } from "../src/providers/embedding/gemini.js";
 import { OpenAIEmbeddingProvider } from "../src/providers/embedding/openai.js";
+import {
+  resolveTransformersCacheDir,
+  resolveTransformersRemoteHost,
+} from "../src/providers/embedding/local.js";
 import type { EmbeddingProvider } from "../src/types.js";
 
 const PROVIDER_ENV_KEYS = [
@@ -19,6 +23,11 @@ const PROVIDER_ENV_KEYS = [
   "OPENAI_BASE_URL",
   "OPENAI_EMBEDDING_MODEL",
   "OPENAI_EMBEDDING_DIMENSIONS",
+  "AGENTMEMORY_TRANSFORMERS_REMOTE_HOST",
+  "TRANSFORMERS_REMOTE_HOST",
+  "HF_ENDPOINT",
+  "AGENTMEMORY_TRANSFORMERS_CACHE_DIR",
+  "TRANSFORMERS_CACHE",
 ] as const;
 
 function clearProviderEnv() {
@@ -90,6 +99,30 @@ describe("createEmbeddingProvider", () => {
     process.env["EMBEDDING_PROVIDER"] = "off";
     const config = loadEmbeddingConfig();
     expect(config.provider).toBeUndefined();
+  });
+});
+
+describe("LocalEmbeddingProvider environment", () => {
+  it("uses an explicit AGENTMEMORY_TRANSFORMERS_REMOTE_HOST with a trailing slash", () => {
+    expect(
+      resolveTransformersRemoteHost({
+        AGENTMEMORY_TRANSFORMERS_REMOTE_HOST: "https://hf-mirror.com",
+      }),
+    ).toBe("https://hf-mirror.com/");
+  });
+
+  it("falls back to HF_ENDPOINT for mirror compatibility", () => {
+    expect(resolveTransformersRemoteHost({ HF_ENDPOINT: "https://hf-mirror.com/" }))
+      .toBe("https://hf-mirror.com/");
+  });
+
+  it("returns null when no remote host override is configured", () => {
+    expect(resolveTransformersRemoteHost({})).toBeNull();
+  });
+
+  it("resolves an explicit transformers cache directory", () => {
+    expect(resolveTransformersCacheDir({ TRANSFORMERS_CACHE: "/tmp/models" }))
+      .toBe("/tmp/models");
   });
 });
 

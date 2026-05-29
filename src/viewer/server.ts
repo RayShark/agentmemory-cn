@@ -134,6 +134,14 @@ const MAX_VIEWER_PORT_RETRIES = 10;
 let boundViewerPort: number | null = null;
 let viewerSkipped = false;
 
+export function resolveViewerListenHost(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw = env.AGENTMEMORY_VIEWER_HOST || env.VIEWER_HOST || "127.0.0.1";
+  const host = raw.trim();
+  return host || "127.0.0.1";
+}
+
 export function getBoundViewerPort(): number | null {
   return boundViewerPort;
 }
@@ -235,9 +243,10 @@ export function startViewerServer(
 
   let attempt = 0;
   let currentPort = requestedPort;
+  const listenHost = resolveViewerListenHost();
 
   const tryListen = (): void => {
-    server.listen(currentPort, "127.0.0.1");
+    server.listen(currentPort, listenHost);
   };
 
   server.on("listening", () => {
@@ -248,10 +257,10 @@ export function startViewerServer(
         : currentPort;
     viewerSkipped = false;
     if (currentPort === requestedPort) {
-      console.log(`[agentmemory] Viewer: http://localhost:${currentPort}`);
+      console.log(`[agentmemory] Viewer: http://${listenHost}:${currentPort}`);
     } else {
       console.log(
-        `[agentmemory] Viewer started on http://localhost:${currentPort} (fallback from ${requestedPort})`,
+        `[agentmemory] Viewer started on http://${listenHost}:${currentPort} (fallback from ${requestedPort})`,
       );
     }
   });

@@ -100,6 +100,97 @@ describe("viewer i18n", () => {
     );
   });
 
+  it("ships Chinese labels for dashboard runtime panels", () => {
+    const zh = readLocale("zh-CN") as {
+      dashboard?: {
+        stats?: Record<string, string>;
+        panels?: Record<string, string>;
+        metrics?: Record<string, string>;
+      };
+    };
+
+    expect(zh.dashboard?.stats).toMatchObject({
+      sessions: "会话",
+      memories: "记忆",
+      health: "健康状态",
+      tokenSavings: "Token 节省",
+    });
+    expect(zh.dashboard?.panels).toMatchObject({
+      recentSessions: "最近会话",
+      recentActivity: "最近动态",
+      workers: "工作进程",
+      semanticMemory: "语义记忆",
+      proceduralMemory: "流程记忆",
+      memoryRelations: "记忆关系",
+    });
+    expect(zh.dashboard?.metrics).toMatchObject({
+      function: "函数",
+      calls: "调用",
+      success: "成功",
+      fail: "失败",
+      avgLatency: "平均延迟",
+      quality: "质量",
+    });
+  });
+
+  it("renders dashboard runtime chrome through locale keys instead of hardcoded English", () => {
+    const html = readFileSync(join(repoRoot, "src", "viewer", "index.html"), "utf-8");
+    const dashboardHtml = html.slice(
+      html.indexOf("function renderDashboard()"),
+      html.indexOf("var dashboardTimer"),
+    );
+    const hardcodedDashboardText = [
+      "Function Metrics (OTel)",
+      ">Workers<",
+      "Circuit Breaker Details",
+      "Semantic Memory",
+      "No semantic facts yet.",
+      "Procedural Memory",
+      "No procedures yet.",
+      "Trigger: ",
+      "Freq: ",
+      "Consolidation Status",
+      "Semantic facts</span>",
+      "Memory Relations",
+      ">Refresh</button>",
+      "Auto-refresh 30s",
+    ];
+
+    for (const text of hardcodedDashboardText) {
+      expect(dashboardHtml).not.toContain(text);
+    }
+  });
+
+  it("renders core non-dashboard chrome through locale keys instead of hardcoded English", () => {
+    const html = readFileSync(join(repoRoot, "src", "viewer", "index.html"), "utf-8");
+    const hardcodedViewerText = [
+      "Loading memories...",
+      "Search memories...",
+      "No memories yet",
+      "Delete Memory",
+      "Loading timeline...",
+      "Select a session to view observations",
+      "observations shown",
+      "Activity Feed",
+      "Graph Stats",
+      "Filter by Type",
+      "Rebuild Graph",
+      "No graph data yet.",
+      "Loading sessions...",
+      "Tool Invocations",
+      "Activity Breakdown",
+      "Top Concepts",
+      "Project Stats",
+      "Feature flags",
+      "Import JSONL</button>",
+      "Pick a session to replay",
+    ];
+
+    for (const text of hardcodedViewerText) {
+      expect(html).not.toContain(text);
+    }
+  });
+
   it("escapes script-breaking characters in injected locale JSON", () => {
     const bundle: ViewerLocaleBundle = {
       locale: "zh-CN",

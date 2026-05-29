@@ -16,6 +16,7 @@ import {
 import { buildVisionDescriptionPrompt } from "../prompts/vision.js";
 import { getXmlTag, getXmlChildren } from "../prompts/xml.js";
 import { getSearchIndex, vectorIndexAddGuarded } from "./search.js";
+import { buildSyntheticCompression } from "./compress-synthetic.js";
 import { CompressOutputSchema } from "../eval/schemas.js";
 import { validateOutput } from "../eval/validator.js";
 import { scoreCompression } from "../eval/quality.js";
@@ -122,6 +123,94 @@ export function registerCompressFunction(
         timestamp: data.raw.timestamp,
       }, locale);
 
+      async function storeSyntheticFallback(reason: string) {
+        const synthetic = buildSyntheticCompression({
+          ...data.raw,
+          id: data.observationId,
+          sessionId: data.sessionId,
+        });
+
+        await kv.set(
+          KV.observations(data.sessionId),
+          data.observationId,
+          synthetic,
+        );
+
+        try {
+          getSearchIndex().add(synthetic);
+        } catch (err) {
+          logger.warn("Failed to index synthetic compression fallback into BM25", {
+            obsId: synthetic.id,
+            sessionId: synthetic.sessionId,
+            title: synthetic.title,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        await vectorIndexAddGuarded(
+          synthetic.id,
+          synthetic.sessionId,
+          synthetic.title + " " + (synthetic.narrative || ""),
+          { kind: "synthetic", logId: synthetic.id },
+        );
+
+        const streamResults = await Promise.allSettled([
+          sdk.trigger({
+            function_id: "stream::set",
+            payload: {
+              stream_name: STREAM.name,
+              group_id: STREAM.group(data.sessionId),
+              item_id: data.observationId,
+              data: { type: "compressed", observation: synthetic },
+            },
+          }),
+          sdk.trigger({
+            function_id: "stream::send",
+            payload: {
+              stream_name: STREAM.name,
+              group_id: STREAM.viewerGroup,
+              id: `compressed-${data.observationId}`,
+              type: "compressed_observation",
+              data: {
+                type: "compressed",
+                observation: synthetic,
+                sessionId: data.sessionId,
+              },
+            },
+            action: TriggerAction.Void(),
+          }),
+        ]);
+        for (const result of streamResults) {
+          if (result.status === "rejected") {
+            logger.warn("Non-fatal stream publish failure after synthetic compress fallback", {
+              sessionId: data.sessionId,
+              observationId: data.observationId,
+              error:
+                result.reason instanceof Error
+                  ? result.reason.message
+                  : String(result.reason),
+            });
+          }
+        }
+
+        const latencyMs = Date.now() - startMs;
+        if (metricsStore) {
+          await metricsStore.record("mem::compress", latencyMs, true, 30);
+        }
+        logger.warn("Compression fell back to synthetic observation", {
+          obsId: data.observationId,
+          reason,
+        });
+
+        return {
+          success: true,
+          compressed: synthetic,
+          qualityScore: 30,
+          fallback: "synthetic",
+          reason,
+        };
+      }
+
       try {
         const validator = (response: string) => {
           const parsed = parseCompressionXml(response);
@@ -146,15 +235,11 @@ export function registerCompressFunction(
 
         const parsed = parseCompressionXml(response);
         if (!parsed) {
-          const latencyMs = Date.now() - startMs;
-          if (metricsStore) {
-            await metricsStore.record("mem::compress", latencyMs, false);
-          }
           logger.warn("Failed to parse compression XML", {
             obsId: data.observationId,
             retried,
           });
-          return { success: false, error: "parse_failed" };
+          return await storeSyntheticFallback("parse_failed");
         }
 
         const qualityScore = scoreCompression(parsed);
@@ -255,15 +340,23 @@ export function registerCompressFunction(
         return { success: true, compressed, qualityScore };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const latencyMs = Date.now() - startMs;
-        if (metricsStore) {
-          await metricsStore.record("mem::compress", latencyMs, false);
-        }
         logger.error("Compression failed", {
           obsId: data.observationId,
           error: msg,
         });
-        return { success: false, error: "compression_failed" };
+        try {
+          return await storeSyntheticFallback("compression_failed");
+        } catch (fallbackErr) {
+          const latencyMs = Date.now() - startMs;
+          if (metricsStore) {
+            await metricsStore.record("mem::compress", latencyMs, false);
+          }
+          logger.error("Synthetic compression fallback failed", {
+            obsId: data.observationId,
+            error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+          });
+          return { success: false, error: "compression_failed" };
+        }
       }
     },
   );

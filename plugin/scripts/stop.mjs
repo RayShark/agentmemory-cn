@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { loadHookEnv } from "./env.mjs";
+
 //#region src/hooks/stop.ts
+loadHookEnv();
 function isSdkChildContext(payload) {
 	if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
 	if (!payload || typeof payload !== "object") return false;
@@ -22,23 +25,20 @@ async function main() {
 		return;
 	}
 	if (isSdkChildContext(data)) return;
-	const sessionId = data.session_id || "unknown";
-	try {
-		await fetch(`${REST_URL}/agentmemory/summarize`, {
-			method: "POST",
-			headers: authHeaders(),
-			body: JSON.stringify({ sessionId }),
-			signal: AbortSignal.timeout(12e4)
-		});
-	} catch {}
-	try {
-		await fetch(`${REST_URL}/agentmemory/session/end`, {
-			method: "POST",
-			headers: authHeaders(),
-			body: JSON.stringify({ sessionId }),
-			signal: AbortSignal.timeout(5e3)
-		});
-	} catch {}
+	const sessionId = data.session_id || data.sessionId || "unknown";
+	fetch(`${REST_URL}/agentmemory/summarize`, {
+		method: "POST",
+		headers: authHeaders(),
+		body: JSON.stringify({ sessionId }),
+		signal: AbortSignal.timeout(12e4)
+	}).catch(() => {});
+	fetch(`${REST_URL}/agentmemory/session/end`, {
+		method: "POST",
+		headers: authHeaders(),
+		body: JSON.stringify({ sessionId }),
+		signal: AbortSignal.timeout(5e3)
+	}).catch(() => {});
+	setTimeout(() => process.exit(0), 1500).unref();
 }
 main();
 

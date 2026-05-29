@@ -1,5 +1,9 @@
 #!/usr/bin/env node
+import { loadHookEnv } from "./env.mjs";
+import { resolveProject } from "./project.mjs";
+
 //#region src/hooks/pre-compact.ts
+loadHookEnv();
 function isSdkChildContext(payload) {
 	if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
 	if (!payload || typeof payload !== "object") return false;
@@ -22,8 +26,8 @@ async function main() {
 		return;
 	}
 	if (isSdkChildContext(data)) return;
-	const sessionId = data.session_id || "unknown";
-	const project = data.cwd || process.cwd();
+	const sessionId = data.session_id || data.sessionId || "unknown";
+	const project = resolveProject(data.cwd);
 	if (process.env["CLAUDE_MEMORY_BRIDGE"] === "true") try {
 		await fetch(`${REST_URL}/agentmemory/claude-bridge/sync`, {
 			method: "POST",

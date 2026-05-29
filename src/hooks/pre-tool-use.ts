@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { loadHookEnv } from "./env.js";
+
+loadHookEnv();
+
 function isSdkChildContext(payload: unknown): boolean {
   if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
   if (!payload || typeof payload !== "object") return false;
@@ -50,13 +54,13 @@ async function main() {
 
   if (isSdkChildContext(data)) return;
 
-  const toolName = data.tool_name as string;
+  const toolName = (data.tool_name ?? data.toolName) as string;
   if (!toolName) return;
 
   const fileTools = ["Edit", "Write", "Read", "Glob", "Grep"];
   if (!fileTools.includes(toolName)) return;
 
-  const toolInput = (data.tool_input || {}) as Record<string, unknown>;
+  const toolInput = (data.tool_input || data.toolArgs || {}) as Record<string, unknown>;
   const files: string[] = [];
   const fileKeys =
     toolName === "Grep"
@@ -76,7 +80,8 @@ async function main() {
     }
   }
 
-  const sessionId = (data.session_id as string) || "unknown";
+  const sessionId =
+    (data.session_id as string) || (data.sessionId as string) || "unknown";
 
   try {
     const res = await fetch(`${REST_URL}/agentmemory/enrich`, {

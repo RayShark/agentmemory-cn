@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+import { loadHookEnv } from "./env.js";
+import { resolveProject } from "./project.js";
+
+loadHookEnv();
+
 function isSdkChildContext(payload: unknown): boolean {
   if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
   if (!payload || typeof payload !== "object") return false;
@@ -29,31 +34,31 @@ async function main() {
   }
 
   if (isSdkChildContext(data)) return;
-  if (data.notification_type !== "permission_prompt") return;
+  const notificationType = data.notification_type ?? data.notificationType;
+  if (notificationType !== "permission_prompt") return;
 
-  const sessionId = (data.session_id as string) || "unknown";
+  const sessionId =
+    (data.session_id as string) || (data.sessionId as string) || "unknown";
+  const cwd = (data.cwd as string) || process.cwd();
 
-  try {
-    await fetch(`${REST_URL}/agentmemory/observe`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({
-        hookType: "notification",
-        sessionId,
-        project: data.cwd || process.cwd(),
-        cwd: data.cwd || process.cwd(),
-        timestamp: new Date().toISOString(),
-        data: {
-          notification_type: data.notification_type,
-          title: data.title,
-          message: data.message,
-        },
-      }),
-      signal: AbortSignal.timeout(2000),
-    });
-  } catch {
-    // fire and forget
-  }
+  fetch(`${REST_URL}/agentmemory/observe`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      hookType: "notification",
+      sessionId,
+      project: resolveProject(cwd),
+      cwd,
+      timestamp: new Date().toISOString(),
+      data: {
+        notification_type: notificationType,
+        title: data.title,
+        message: data.message,
+      },
+    }),
+    signal: AbortSignal.timeout(2000),
+  }).catch(() => {});
+  setTimeout(() => process.exit(0), 500).unref();
 }
 
 main();

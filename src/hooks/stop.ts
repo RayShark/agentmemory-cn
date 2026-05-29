@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { loadHookEnv } from "./env.js";
+
+loadHookEnv();
+
 // Inlined — see src/hooks/sdk-guard.ts for canonical version. Kept local
 // per-hook so tsdown does not emit a shared hashed chunk that would churn
 // the diff on every rebuild.
@@ -37,18 +41,15 @@ async function main() {
     return;
   }
 
-  const sessionId = (data.session_id as string) || "unknown";
+  const sessionId =
+    (data.session_id as string) || (data.sessionId as string) || "unknown";
 
-  try {
-    await fetch(`${REST_URL}/agentmemory/summarize`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ sessionId }),
-      signal: AbortSignal.timeout(120000), // Increased from 30s to 120s
-    });
-  } catch {
-    // summarize is best-effort
-  }
+  fetch(`${REST_URL}/agentmemory/summarize`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ sessionId }),
+    signal: AbortSignal.timeout(120000),
+  }).catch(() => {});
 
   // Claude Code fires a separate `SessionEnd` hook that closes the
   // viewer session lifecycle. Codex does not have a SessionEnd event,
@@ -57,16 +58,13 @@ async function main() {
   // so the viewer shows `completed` for Codex sessions; for Claude Code
   // this is a harmless idempotent second call (session-end.mjs runs on
   // SessionEnd and sets the same fields).
-  try {
-    await fetch(`${REST_URL}/agentmemory/session/end`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ sessionId }),
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    // session/end is best-effort
-  }
+  fetch(`${REST_URL}/agentmemory/session/end`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ sessionId }),
+    signal: AbortSignal.timeout(5000),
+  }).catch(() => {});
+  setTimeout(() => process.exit(0), 1500).unref();
 }
 
 main();

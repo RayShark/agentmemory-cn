@@ -14,6 +14,8 @@ const hookEntries = [
   "src/hooks/stop.ts",
   "src/hooks/session-end.ts",
   "src/hooks/post-commit.ts",
+  "src/hooks/env.ts",
+  "src/hooks/project.ts",
 ];
 
 const shared = {
@@ -65,6 +67,7 @@ export default defineConfig([
     entry: hookEntries,
     outDir: "dist/hooks",
     ...shared,
+    splitting: false,
     clean: false,
     sourcemap: false,
   },
@@ -72,6 +75,7 @@ export default defineConfig([
     entry: hookEntries,
     outDir: "plugin/scripts",
     ...shared,
+    splitting: false,
     clean: false,
     sourcemap: false,
   },

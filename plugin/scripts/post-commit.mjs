@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import { loadHookEnv } from "./env.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 //#region src/hooks/post-commit.ts
 const exec = promisify(execFile);
+loadHookEnv();
 function isSdkChildContext(payload) {
 	if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
 	if (!payload || typeof payload !== "object") return false;
@@ -37,7 +39,7 @@ async function main() {
 	} catch {}
 	if (isSdkChildContext(data)) return;
 	const cwd = data.cwd || process.env["AGENTMEMORY_CWD"] || process.cwd();
-	const sessionId = data.session_id || process.env["AGENTMEMORY_SESSION_ID"] || void 0;
+	const sessionId = data.session_id || data.sessionId || process.env["AGENTMEMORY_SESSION_ID"] || void 0;
 	const sha = process.env["AGENTMEMORY_COMMIT_SHA"] || await git(["rev-parse", "HEAD"], cwd);
 	if (!sha) return;
 	const branch = await git([

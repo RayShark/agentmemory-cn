@@ -125,6 +125,7 @@ async function setupHandler(opts: {
   sessionId: string;
   obsCount: number;
   provider: MemoryProvider;
+  metricsStore?: { record: ReturnType<typeof vi.fn> };
 }) {
   const sdk = mockSdk();
   const kv = mockKV();
@@ -141,7 +142,7 @@ async function setupHandler(opts: {
     const o = makeObs(i, opts.sessionId);
     await kv.set(`obs:${opts.sessionId}`, o.id, o);
   }
-  registerSummarizeFunction(sdk as any, kv as any, opts.provider);
+  registerSummarizeFunction(sdk as any, kv as any, opts.provider, opts.metricsStore as never);
   const handler = sdk.functions.get("mem::summarize")!;
   return { handler, kv };
 }
@@ -180,6 +181,26 @@ describe("mem::summarize chunking", () => {
     expect(provider.calls[0].user).toContain("Session observations (10 total)");
     const stored: any = await kv.get("summaries", "ses_small");
     expect(stored?.title).toBe("Small session");
+  });
+
+  it("does not count no-provider summarize skips as function failures", async () => {
+    const metricsStore = { record: vi.fn() };
+    const { handler } = await setupHandler({
+      sessionId: "ses_no_provider",
+      obsCount: 1,
+      provider: {
+        name: "noop",
+        compress: async () => "",
+        summarize: async () => "",
+      },
+      metricsStore,
+    });
+
+    const result: any = await handler({ sessionId: "ses_no_provider" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("no_provider");
+    expect(metricsStore.record).not.toHaveBeenCalled();
   });
 
   it("large session map-reduces: N chunk calls + 1 reduce call", async () => {

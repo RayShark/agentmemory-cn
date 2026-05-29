@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { loadHookEnv } from "./env.mjs";
+
 //#region src/hooks/pre-tool-use.ts
+loadHookEnv();
 function isSdkChildContext(payload) {
 	if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
 	if (!payload || typeof payload !== "object") return false;
@@ -24,7 +27,7 @@ async function main() {
 		return;
 	}
 	if (isSdkChildContext(data)) return;
-	const toolName = data.tool_name;
+	const toolName = data.tool_name ?? data.toolName;
 	if (!toolName) return;
 	if (![
 		"Edit",
@@ -33,7 +36,7 @@ async function main() {
 		"Glob",
 		"Grep"
 	].includes(toolName)) return;
-	const toolInput = data.tool_input || {};
+	const toolInput = data.tool_input || data.toolArgs || {};
 	const files = [];
 	const fileKeys = toolName === "Grep" ? ["path", "file"] : [
 		"file_path",
@@ -51,7 +54,7 @@ async function main() {
 		const pattern = toolInput["pattern"];
 		if (typeof pattern === "string" && pattern.length > 0) terms.push(pattern);
 	}
-	const sessionId = data.session_id || "unknown";
+	const sessionId = data.session_id || data.sessionId || "unknown";
 	try {
 		const res = await fetch(`${REST_URL}/agentmemory/enrich`, {
 			method: "POST",

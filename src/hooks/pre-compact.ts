@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+import { loadHookEnv } from "./env.js";
+import { resolveProject } from "./project.js";
+
+loadHookEnv();
+
 function isSdkChildContext(payload: unknown): boolean {
   if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
   if (!payload || typeof payload !== "object") return false;
@@ -30,8 +35,9 @@ async function main() {
 
   if (isSdkChildContext(data)) return;
 
-  const sessionId = (data.session_id as string) || "unknown";
-  const project = (data.cwd as string) || process.cwd();
+  const sessionId =
+    (data.session_id as string) || (data.sessionId as string) || "unknown";
+  const project = resolveProject(data.cwd);
 
   if (process.env["CLAUDE_MEMORY_BRIDGE"] === "true") {
     try {

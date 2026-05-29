@@ -1,5 +1,9 @@
 #!/usr/bin/env node
+import { loadHookEnv } from "./env.mjs";
+import { resolveProject } from "./project.mjs";
+
 //#region src/hooks/subagent-stop.ts
+loadHookEnv();
 function isSdkChildContext(payload) {
 	if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
 	if (!payload || typeof payload !== "object") return false;
@@ -22,27 +26,29 @@ async function main() {
 		return;
 	}
 	if (isSdkChildContext(data)) return;
-	const sessionId = data.session_id || "unknown";
+	const sessionId = data.session_id || data.sessionId || "unknown";
+	const agentId = data.agent_id || data.agentName;
+	const agentType = data.agent_type || data.agentDisplayName || data.agentName;
 	const lastMsg = typeof data.last_assistant_message === "string" ? data.last_assistant_message.slice(0, 4e3) : "";
-	try {
-		await fetch(`${REST_URL}/agentmemory/observe`, {
-			method: "POST",
-			headers: authHeaders(),
-			body: JSON.stringify({
-				hookType: "subagent_stop",
-				sessionId,
-				project: data.cwd || process.cwd(),
-				cwd: data.cwd || process.cwd(),
-				timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-				data: {
-					agent_id: data.agent_id,
-					agent_type: data.agent_type,
-					last_message: lastMsg
-				}
-			}),
-			signal: AbortSignal.timeout(2e3)
-		});
-	} catch {}
+	const cwd = data.cwd || process.cwd();
+	fetch(`${REST_URL}/agentmemory/observe`, {
+		method: "POST",
+		headers: authHeaders(),
+		body: JSON.stringify({
+			hookType: "subagent_stop",
+			sessionId,
+			project: resolveProject(cwd),
+			cwd,
+			timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+			data: {
+				agent_id: agentId,
+				agent_type: agentType,
+				last_message: lastMsg
+			}
+		}),
+		signal: AbortSignal.timeout(2e3)
+	}).catch(() => {});
+	setTimeout(() => process.exit(0), 500).unref();
 }
 main();
 

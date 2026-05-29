@@ -2,8 +2,11 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { loadHookEnv } from "./env.js";
 
 const exec = promisify(execFile);
+
+loadHookEnv();
 
 function isSdkChildContext(payload: unknown): boolean {
   if (process.env["AGENTMEMORY_SDK_CHILD"] === "1") return true;
@@ -53,6 +56,7 @@ async function main() {
     process.cwd();
   const sessionId =
     (data.session_id as string) ||
+    (data.sessionId as string) ||
     process.env["AGENTMEMORY_SESSION_ID"] ||
     undefined;
 

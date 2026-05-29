@@ -1242,8 +1242,8 @@ Create `~/.agentmemory/.env`:
 # leave OFF unless you understand the Stop-hook recursion risk (#149 follow-up):
 # AGENTMEMORY_ALLOW_AGENT_SDK=true
 
-# Embedding provider (auto-detected, or override)
-# EMBEDDING_PROVIDER=local
+# Embedding provider (auto-detected, or override; use none/off to force BM25-only)
+# EMBEDDING_PROVIDER=none
 # VOYAGE_API_KEY=...
 # OPENAI_API_KEY=sk-...
 # OPENAI_BASE_URL=https://api.openai.com   # Override for Azure / vLLM / LM Studio / proxies

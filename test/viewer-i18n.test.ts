@@ -114,6 +114,7 @@ describe("viewer i18n", () => {
       memories: "记忆",
       health: "健康状态",
       tokenSavings: "Token 节省",
+      tokensSaved: "约 {{tokens}} 个 token · 已节省 {{cost}}",
     });
     expect(zh.dashboard?.panels).toMatchObject({
       recentSessions: "最近会话",
@@ -130,6 +131,11 @@ describe("viewer i18n", () => {
       fail: "失败",
       avgLatency: "平均延迟",
       quality: "质量",
+    });
+    expect((zh as { flags?: Record<string, string> }).flags).toMatchObject({
+      requiresLlm: "需要 LLM 提供方密钥（ANTHROPIC_API_KEY、GEMINI_API_KEY 等）。",
+      noProviderTitle: "没有设置 LLM 提供方密钥",
+      bm25Title: "正在以仅 BM25 模式运行",
     });
   });
 

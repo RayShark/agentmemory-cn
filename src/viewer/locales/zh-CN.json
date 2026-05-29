@@ -247,10 +247,10 @@
     "updated": "更新时间"
   },
   "flags": {
-    "requiresLlm": "需要 LLM provider key（ANTHROPIC_API_KEY、GEMINI_API_KEY 等）。",
-    "noProviderTitle": "没有设置 LLM provider key",
-    "noProviderDesc": "在提供 key 前，压缩、摘要和图谱抽取会保持禁用。",
-    "bm25Title": "正在以 BM25-only 模式运行",
+    "requiresLlm": "需要 LLM 提供方密钥（ANTHROPIC_API_KEY、GEMINI_API_KEY 等）。",
+    "noProviderTitle": "没有设置 LLM 提供方密钥",
+    "noProviderDesc": "在提供密钥前，压缩、摘要和图谱抽取会保持禁用。",
+    "bm25Title": "正在以仅 BM25 模式运行",
     "bm25Desc": "语义向量搜索已关闭。BM25 关键词搜索仍然启用，适合精确匹配。",
     "learnMore": "了解更多 ->",
     "dismiss": "关闭",
@@ -287,7 +287,7 @@
   "dashboard": {
     "loading": "正在加载仪表盘...",
     "loadFailed": "仪表盘加载失败: {{message}}",
-    "loadFailedHint": "请查看浏览器控制台里的完整错误。如果看到 CSP violations，请带上 agentmemory 版本和 violation 文本提交 issue。",
+    "loadFailedHint": "请查看浏览器控制台里的完整错误。如果看到 CSP 违规，请带上 agentmemory 版本和违规文本提交 issue。",
     "firstRunKicker": "首次运行 -> 10 秒看到效果",
     "firstRunTitle": "写入示例数据并验证语义召回",
     "firstRunBody": "agentmemory 正在运行，但还没有捕获到任何会话。在另一个终端运行 demo 命令：它会写入 3 个真实感编码会话，并证明混合搜索能找出关键词搜索会漏掉的语义相关记忆。",
@@ -309,7 +309,7 @@
       "circuitBreaker": "熔断器",
       "failures": "{{count}} 次失败",
       "tokenSavings": "Token 节省",
-      "tokensSaved": "~{{tokens}} tokens · 已节省 {{cost}}"
+      "tokensSaved": "约 {{tokens}} 个 token · 已节省 {{cost}}"
     },
     "panels": {
       "systemResources": "系统资源",

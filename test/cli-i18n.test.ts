@@ -34,6 +34,8 @@ describe("CLI i18n messages", () => {
       expect(value).not.toBe(t("en", key));
       expect(value).toMatch(cjk);
     }
+    expect(t("zh-CN", "cli.doctor.embeddingProvider")).toBe("嵌入提供方");
+    expect(t("zh-CN", "cli.doctor.graphPopulated")).toBe("知识图谱已填充");
   });
 
   it("preserves commands, env vars, URLs, and API paths inside localized CLI text", () => {

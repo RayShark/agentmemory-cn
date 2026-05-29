@@ -50,6 +50,13 @@ function hasRealValue(v: string | undefined): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+const DISABLED_EMBEDDING_PROVIDERS = new Set([
+  "none",
+  "off",
+  "disabled",
+  "false",
+]);
+
 function detectProvider(env: Record<string, string>): ProviderConfig {
   const maxTokens = parseInt(env["MAX_TOKENS"] || "4096", 10);
 
@@ -219,7 +226,7 @@ export function loadEmbeddingConfig(): EmbeddingConfig {
   vectorWeight =
     isNaN(vectorWeight) || vectorWeight < 0 ? 0.6 : Math.min(vectorWeight, 1);
   return {
-    provider: env["EMBEDDING_PROVIDER"] || undefined,
+    provider: detectEmbeddingProvider(env) ?? undefined,
     bm25Weight,
     vectorWeight,
   };
@@ -229,8 +236,11 @@ export function detectEmbeddingProvider(
   env?: Record<string, string>,
 ): string | null {
   const source = env ?? getMergedEnv();
-  const forced = source["EMBEDDING_PROVIDER"];
-  if (forced) return forced;
+  const forced = source["EMBEDDING_PROVIDER"]?.trim().toLowerCase();
+  if (forced) {
+    if (DISABLED_EMBEDDING_PROVIDERS.has(forced)) return null;
+    return forced;
+  }
 
   if (source["GEMINI_API_KEY"]) return "gemini";
   if (source["OPENAI_API_KEY"]) return "openai";

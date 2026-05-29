@@ -37,6 +37,36 @@ describe("REST API i18n", () => {
     expect((graph as { affects?: string[] } | undefined)?.affects).toEqual(["Graph", "Dashboard"]);
   });
 
+  it("reports no embedding provider when embeddings are explicitly disabled", async () => {
+    const originalEmbeddingProvider = process.env["EMBEDDING_PROVIDER"];
+    const originalOpenAiKey = process.env["OPENAI_API_KEY"];
+    process.env["EMBEDDING_PROVIDER"] = "none";
+    process.env["OPENAI_API_KEY"] = "test-key";
+    try {
+      let flagsHandler:
+        | ((req: { headers?: Record<string, string> }) => Promise<{ status_code: number; body: unknown }>)
+        | undefined;
+      const sdk = {
+        registerFunction: vi.fn((id: string, cb: typeof flagsHandler) => {
+          if (id === "api::config-flags") flagsHandler = cb;
+        }),
+        registerTrigger: vi.fn(),
+      } as unknown as import("iii-sdk").ISdk;
+
+      registerApiTriggers(sdk, {} as never);
+      if (!flagsHandler) throw new Error("api::config-flags not registered");
+
+      const response = await flagsHandler({});
+      expect(response.status_code).toBe(200);
+      expect((response.body as { embeddingProvider?: string }).embeddingProvider).toBe("none");
+    } finally {
+      if (originalEmbeddingProvider === undefined) delete process.env["EMBEDDING_PROVIDER"];
+      else process.env["EMBEDDING_PROVIDER"] = originalEmbeddingProvider;
+      if (originalOpenAiKey === undefined) delete process.env["OPENAI_API_KEY"];
+      else process.env["OPENAI_API_KEY"] = originalOpenAiKey;
+    }
+  });
+
   it("localizes high-frequency validation errors without changing status codes", async () => {
     let searchHandler:
       | ((req: { body?: Record<string, unknown>; headers?: Record<string, string> }) => Promise<{ status_code: number; body: unknown }>)

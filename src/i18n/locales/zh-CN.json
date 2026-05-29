@@ -143,11 +143,11 @@
       "heap": "堆内存",
       "uptime": "运行时间",
       "viewer": "Viewer",
-      "tokenSavings": "Token 节省: 约 {{tokens}} tokens（降低 {{percent}}%）",
+      "tokenSavings": "Token 节省: 约 {{tokens}} 个 token（降低 {{percent}}%）",
       "fullContext": "完整上下文",
       "injected": "已注入",
       "noopProvider": "✗ noop（未配置 key）",
-      "provider": "Provider",
+      "provider": "提供方",
       "embeddings": "Embeddings",
       "flags": "功能开关"
     },
@@ -159,7 +159,7 @@
       "copyFailed": "复制模板失败: {{message}}",
       "wrote": "已写入 {{target}}",
       "noteTitle": "下一步",
-      "note": "所有 key 默认都是注释状态。取消注释你需要的配置。\n\n常见下一步:\n  1. 选择一个 LLM provider key（ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / etc.）\n  2. 运行 `npx @agentmemory/agentmemory doctor` 验证 daemon 能读到配置\n  3. 运行 `npx @agentmemory/agentmemory` 启动 worker",
+      "note": "所有 key 默认都是注释状态。取消注释你需要的配置。\n\n常见下一步:\n  1. 选择一个 LLM 提供方密钥（ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / etc.）\n  2. 运行 `npx @agentmemory/agentmemory doctor` 验证 daemon 能读到配置\n  3. 运行 `npx @agentmemory/agentmemory` 启动 worker",
       "outro": "编辑 {{target}} 后即可使用。"
     },
     "demo": {
@@ -184,25 +184,25 @@
     "doctor": {
       "intro": "agentmemory 诊断",
       "cannotAllDryRun": "不能同时使用 --all 和 --dry-run。",
-      "serverReachable": "Server 可达",
+      "serverReachable": "服务可达",
       "serverStartHint": "启动命令: npx @agentmemory/agentmemory（已尝试 {{base}}）",
       "healthStatus": "健康状态",
       "statusHint": "状态: {{status}}",
-      "llmProvider": "LLM provider",
+      "llmProvider": "LLM 提供方",
       "llmProviderHint": "在 ~/.agentmemory/.env 中设置 ANTHROPIC_API_KEY（或 GEMINI/OPENROUTER/MINIMAX）",
-      "embeddingProvider": "Embedding provider",
+      "embeddingProvider": "嵌入提供方",
       "embeddingProviderHint": "当前仅 BM25。可添加 OPENAI_API_KEY / VOYAGE_API_KEY / COHERE_API_KEY / OLLAMA_HOST",
       "ccHooksRegistered": "Claude Code plugin hooks 已注册",
       "ccHooksNotLoaded": "Plugin 已启用但 Claude Code 未加载 hooks。尝试: /plugin uninstall agentmemory@agentmemory && /plugin install agentmemory@agentmemory，然后重启会话。",
       "ccNoDebugLog": "无法验证 — 没有 Claude Code debug log。先运行一次 `claude --debug -p \"x\"`，再重新运行 doctor。",
-      "graphPopulated": "Knowledge graph 已填充",
-      "graphEmptyHint": "Graph 为空。请在 GRAPH_EXTRACTION_ENABLED=true 下运行一个会话。",
+      "graphPopulated": "知识图谱已填充",
+      "graphEmptyHint": "知识图谱为空。请在 GRAPH_EXTRACTION_ENABLED=true 下运行一个会话。",
       "fix": "F  修复",
       "skip": "S  跳过",
       "more": "?  更多信息",
       "quit": "Q  退出 doctor",
       "dryRunWould": "[dry-run] 将执行: {{preview}}",
-      "serverSummary": "server: {{passed}}/{{total}} 通过",
+      "serverSummary": "服务: {{passed}}/{{total}} 通过",
       "dryRunPlan": "dry-run 计划",
       "dryRunComplete": "Dry-run 完成。去掉 --dry-run 后可应用修复。",
       "why": "原因: {{preview}}",
@@ -218,16 +218,16 @@
       "envMissing": {
         "message": "缺少 ~/.agentmemory/.env。",
         "fixPreview": "将 .env.example 复制到 ~/.agentmemory/.env（你的 keys 文件）。",
-        "moreInfo": "agentmemory 从 ~/.agentmemory/.env 读取 provider API keys（Anthropic、OpenAI、Gemini 等）。没有这个文件时，daemon 会退回 BM25-only 搜索，LLM 增强不会运行。",
+        "moreInfo": "agentmemory 从 ~/.agentmemory/.env 读取提供方 API keys（Anthropic、OpenAI、Gemini 等）。没有这个文件时，daemon 会退回仅 BM25 搜索，LLM 增强不会运行。",
         "detail": "没有 env 文件"
       },
       "noLlmProviderKey": {
-        "message": "~/.agentmemory/.env 中没有 LLM provider API key。",
+        "message": "~/.agentmemory/.env 中没有 LLM 提供方 API key。",
         "fixPreview": "在 $EDITOR 中打开 ~/.agentmemory/.env，填入 key 后重新检查。",
         "moreInfo": "至少设置一个：ANTHROPIC_API_KEY、OPENAI_API_KEY、GEMINI_API_KEY、OPENROUTER_API_KEY、MINIMAX_API_KEY。daemon 启动时会选择第一个真实（非 placeholder）的值。",
         "envMissingDetail": "env 文件缺失（先运行 env-missing 修复）",
         "foundDetail": "已找到: {{keys}}",
-        "noKeyDetail": "没有设置 provider key"
+        "noKeyDetail": "没有设置提供方密钥"
       },
       "engineVersionMismatch": {
         "message": "PATH 上的 iii binary 与 agentmemory pin 的版本不一致。",
@@ -253,7 +253,7 @@
       "envPlaceholderKeys": {
         "message": "~/.agentmemory/.env 包含 placeholder/empty API keys。",
         "fixPreview": "在 $EDITOR 中打开 ~/.agentmemory/.env，填入真实值。",
-        "moreInfo": "ANTHROPIC_API_KEY=sk-ant-... 或 =your-key-here 这类值会被视为缺失。daemon 会退回 BM25-only 搜索。请替换为真实 key 或注释该行。",
+        "moreInfo": "ANTHROPIC_API_KEY=sk-ant-... 或 =your-key-here 这类值会被视为缺失。daemon 会退回仅 BM25 搜索。请替换为真实 key 或注释该行。",
         "envMissingDetail": "env 文件缺失（由 env-missing 处理）",
         "placeholderDetail": "placeholder: {{keys}}"
       },
@@ -419,19 +419,19 @@
       "cancelled": "设置已取消。之后可随时重新运行: agentmemory --reset",
       "howThisWorksTitle": "工作方式",
       "howThisWorks": "所有选中的 agents 都共享 :3111 上的同一份记忆。\nClaude Code 保存的记忆会立即对 Codex + Cursor 可见。",
-      "providerQuestion": "agentmemory 应使用哪个 LLM provider 做 compress/consolidate？",
+      "providerQuestion": "agentmemory 应使用哪个 LLM 提供方做压缩/整合？",
       "providerAnthropic": "Anthropic - claude",
       "providerOpenai": "OpenAI - gpt",
       "providerGemini": "Google - gemini",
       "providerOpenrouter": "OpenRouter - multi-model",
       "providerMinimax": "MiniMax - minimax-m1",
-      "providerSkip": "跳过 - BM25-only mode (no LLM key)",
+      "providerSkip": "跳过 - 仅 BM25 模式（无 LLM 密钥）",
       "readyTitle": "就绪",
       "savedPrefs": "已保存偏好到 {{path}}",
       "wroteEnv": "已写入 {{path}}（编辑后添加你的 API key）",
       "envWriteFailed": "无法写入 ~/.agentmemory/.env - 此流程结束后请运行 `agentmemory init`。",
       "uncommentProvider": "取消注释该文件中的 {{envKey}}= 以启用 {{provider}}。",
-      "noProvider": "未选择 provider - agentmemory 将以 BM25-only mode 运行。",
+      "noProvider": "未选择提供方 - agentmemory 将以仅 BM25 模式运行。",
       "wireNowTitle": "下一步",
       "wireNowPrompt": "现在接入选中的 agents？",
       "wireNow": "现在为每个选中的 agent 运行 `agentmemory connect <agent>`？[Y/n]",
@@ -618,16 +618,16 @@
       "notEnabled": "{{feature}} 未启用",
       "notFound": "{{item}} 未找到",
       "invalidDate": "{{field}} 日期格式无效",
-      "providerRequired": "{{feature}} 需要 provider",
+      "providerRequired": "{{feature}} 需要提供方",
       "requiresSecret": "{{feature}} 需要 AGENTMEMORY_SECRET",
       "integerRange": "{{field}} 必须是 {{min}} 到 {{max}} 之间的整数",
       "commitNoLinkedSessions": "没有会话关联到此 commit",
       "fieldRequiredStringAndArray": "{{stringField}}（字符串）和 {{arrayField}}（字符串数组）为必填项",
       "observationsArrayRequired": "observations 数组为必填项",
       "arrayRequired": "{{field}} 数组为必填项",
-      "pathParameterRequired": "{{field}} path parameter 为必填项",
-      "queryParamRequired": "{{field}} query param 为必填项",
-      "queryParamIsRequired": "{{field}} query param 为必填项",
+      "pathParameterRequired": "{{field}} path 参数为必填项",
+      "queryParamRequired": "{{field}} query 参数为必填项",
+      "queryParamIsRequired": "{{field}} query 参数为必填项",
       "oneOfRequired": "{{fields}} 为必填项",
       "fieldEnum": "{{field}} 必须是 {{values}}",
       "fieldMax": "{{field}} 必须小于等于 {{max}}",
@@ -636,11 +636,11 @@
     "featureDisabled": {
       "graph": {
         "error": "知识图谱未启用",
-        "enableHow": "设置 GRAPH_EXTRACTION_ENABLED=true 并重启。需要配置 LLM provider key。"
+        "enableHow": "设置 GRAPH_EXTRACTION_ENABLED=true 并重启。需要配置 LLM 提供方密钥。"
       },
       "consolidation": {
         "error": "记忆整合流水线未启用",
-        "enableHow": "设置 CONSOLIDATION_ENABLED=true 并重启。需要配置 LLM provider key。"
+        "enableHow": "设置 CONSOLIDATION_ENABLED=true 并重启。需要配置 LLM 提供方密钥。"
       }
     }
   },
@@ -660,17 +660,17 @@
     "GRAPH_EXTRACTION_ENABLED": {
       "label": "知识图谱抽取",
       "description": "从观察中抽取实体和关系，写入知识图谱。",
-      "enableHow": "设置 GRAPH_EXTRACTION_ENABLED=true，并提供 LLM key，然后重启。"
+      "enableHow": "设置 GRAPH_EXTRACTION_ENABLED=true，并提供 LLM 密钥，然后重启。"
     },
     "CONSOLIDATION_ENABLED": {
       "label": "记忆整合",
       "description": "定期把会话总结为语义事实和流程记忆。",
-      "enableHow": "设置 CONSOLIDATION_ENABLED=true，并提供 LLM key，然后重启。"
+      "enableHow": "设置 CONSOLIDATION_ENABLED=true，并提供 LLM 密钥，然后重启。"
     },
     "AGENTMEMORY_AUTO_COMPRESS": {
       "label": "LLM 观察压缩",
       "description": "每条观察都由 LLM 压缩，以获得更丰富的总结（会消耗 token）。关闭时使用零 LLM 的合成压缩。",
-      "enableHow": "设置 AGENTMEMORY_AUTO_COMPRESS=true，并提供 LLM key。"
+      "enableHow": "设置 AGENTMEMORY_AUTO_COMPRESS=true，并提供 LLM 密钥。"
     },
     "AGENTMEMORY_INJECT_CONTEXT": {
       "label": "会话内上下文注入",

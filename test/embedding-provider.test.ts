@@ -3,21 +3,36 @@ import {
   createEmbeddingProvider,
   withDimensionGuard,
 } from "../src/providers/embedding/index.js";
+import { detectEmbeddingProvider, loadEmbeddingConfig } from "../src/config.js";
 import { GeminiEmbeddingProvider } from "../src/providers/embedding/gemini.js";
 import { OpenAIEmbeddingProvider } from "../src/providers/embedding/openai.js";
 import type { EmbeddingProvider } from "../src/types.js";
+
+const PROVIDER_ENV_KEYS = [
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "OPENAI_API_KEY",
+  "VOYAGE_API_KEY",
+  "COHERE_API_KEY",
+  "OPENROUTER_API_KEY",
+  "EMBEDDING_PROVIDER",
+  "OPENAI_BASE_URL",
+  "OPENAI_EMBEDDING_MODEL",
+  "OPENAI_EMBEDDING_DIMENSIONS",
+] as const;
+
+function clearProviderEnv() {
+  for (const key of PROVIDER_ENV_KEYS) {
+    process.env[key] = "";
+  }
+}
 
 describe("createEmbeddingProvider", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["GEMINI_API_KEY"];
-    delete process.env["OPENAI_API_KEY"];
-    delete process.env["VOYAGE_API_KEY"];
-    delete process.env["COHERE_API_KEY"];
-    delete process.env["OPENROUTER_API_KEY"];
-    delete process.env["EMBEDDING_PROVIDER"];
+    clearProviderEnv();
   });
 
   afterEach(() => {
@@ -50,6 +65,32 @@ describe("createEmbeddingProvider", () => {
     const provider = createEmbeddingProvider();
     expect(provider).toBeInstanceOf(OpenAIEmbeddingProvider);
   });
+
+  it("explicit none/off values disable embeddings even when API keys exist", () => {
+    for (const disabled of ["none", "off", "disabled", "false"]) {
+      expect(
+        detectEmbeddingProvider({
+          EMBEDDING_PROVIDER: disabled,
+          OPENAI_API_KEY: "test-key-456",
+          GEMINI_API_KEY: "test-key-123",
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("does not create a provider when EMBEDDING_PROVIDER disables embeddings", () => {
+    process.env["OPENAI_API_KEY"] = "test-key-456";
+    process.env["EMBEDDING_PROVIDER"] = "none";
+    const provider = createEmbeddingProvider();
+    expect(provider).toBeNull();
+  });
+
+  it("omits disabled EMBEDDING_PROVIDER from loaded embedding config", () => {
+    process.env["OPENAI_API_KEY"] = "test-key-456";
+    process.env["EMBEDDING_PROVIDER"] = "off";
+    const config = loadEmbeddingConfig();
+    expect(config.provider).toBeUndefined();
+  });
 });
 
 describe("OpenAIEmbeddingProvider", () => {
@@ -57,9 +98,7 @@ describe("OpenAIEmbeddingProvider", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["OPENAI_BASE_URL"];
-    delete process.env["OPENAI_EMBEDDING_MODEL"];
-    delete process.env["OPENAI_EMBEDDING_DIMENSIONS"];
+    clearProviderEnv();
   });
 
   afterEach(() => {
@@ -73,7 +112,7 @@ describe("OpenAIEmbeddingProvider", () => {
   });
 
   it("throws when no API key is provided", () => {
-    delete process.env["OPENAI_API_KEY"];
+    process.env["OPENAI_API_KEY"] = "";
     expect(() => new OpenAIEmbeddingProvider()).toThrow("OPENAI_API_KEY is required");
   });
 

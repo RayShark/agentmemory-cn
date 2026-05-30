@@ -113,11 +113,16 @@ function truncate(value: unknown, max: number): unknown {
     return value.slice(0, max) + "\n[...truncated]";
   }
   if (typeof value === "object" && value !== null) {
-    const str = JSON.stringify(value);
+    let str: string;
+    try {
+      str = JSON.stringify(value);
+    } catch {
+      return "[unserializable tool output]";
+    }
     if (str.length > max) return str.slice(0, max) + "...[truncated]";
     return value;
   }
   return value;
 }
 
-main();
+main().catch(() => {});

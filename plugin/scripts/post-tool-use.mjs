@@ -90,13 +90,18 @@ function extractImageData(output) {
 function truncate(value, max) {
 	if (typeof value === "string" && value.length > max) return value.slice(0, max) + "\n[...truncated]";
 	if (typeof value === "object" && value !== null) {
-		const str = JSON.stringify(value);
+		let str;
+		try {
+			str = JSON.stringify(value);
+		} catch {
+			return "[unserializable tool output]";
+		}
 		if (str.length > max) return str.slice(0, max) + "...[truncated]";
 		return value;
 	}
 	return value;
 }
-main();
+main().catch(() => {});
 
 //#endregion
 export {  };

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" session-start.mjs"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/prompt-submit.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" prompt-submit.mjs"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pre-tool-use.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" pre-tool-use.mjs"
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-use.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" post-tool-use.mjs"
           }
         ]
       }
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/post-tool-failure.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" post-tool-failure.mjs"
           }
         ]
       }
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pre-compact.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" pre-compact.mjs"
           }
         ]
       }
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/subagent-start.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" subagent-start.mjs"
           }
         ]
       }
@@ -76,7 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/subagent-stop.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" subagent-stop.mjs"
           }
         ]
       }
@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/notification.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" notification.mjs"
           }
         ]
       }
@@ -96,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/task-completed.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" task-completed.mjs"
           }
         ]
       }
@@ -106,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/stop.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" stop.mjs"
           }
         ]
       }
@@ -116,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.mjs\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/run-hook.sh\" session-end.mjs"
           }
         ]
       }

@@ -55,7 +55,8 @@ describe("buildMergedHooks against plugin/hooks/hooks.json (Claude Code)", () =>
     expect(
       sessionStart.some((e) =>
         e.hooks.some((h) =>
-          h.command.includes(`${PLUGIN_ROOT}/scripts/session-start.mjs`),
+          h.command.includes(`${PLUGIN_ROOT}/scripts/run-hook.sh`) &&
+          h.command.includes("session-start.mjs"),
         ),
       ),
     ).toBe(true);

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 const repoRoot = resolve(__dirname, "..");
 const pluginRoot = join(repoRoot, "plugin");
@@ -20,15 +22,53 @@ function hookCommands(path: string): string[] {
 }
 
 describe("Plugin hook manifests", () => {
-  it("quote plugin script paths so roots with spaces stay intact", () => {
+  it("route hooks through the best-effort wrapper so roots with spaces stay intact", () => {
     for (const manifest of ["hooks.json", "hooks.codex.json"]) {
       const commands = hookCommands(join(pluginRoot, "hooks", manifest));
       expect(commands.length, `${manifest} should contain hook commands`).toBeGreaterThan(0);
 
       for (const command of commands) {
-        expect(command).toMatch(/^node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/[^\s"]+\.mjs"$/);
+        expect(command).toMatch(
+          /^bash "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/run-hook\.sh" [^\s"]+\.mjs$/,
+        );
       }
     }
+  });
+
+  it("wrapper exits zero when the requested hook script is missing", () => {
+    const wrapper = join(pluginRoot, "scripts/run-hook.sh");
+    const result = spawnSync("bash", [wrapper, "missing-hook.mjs"], {
+      cwd: repoRoot,
+      env: {
+        HOME: process.env["HOME"] ?? "",
+        PATH: process.env["PATH"] ?? "",
+        CLAUDE_PLUGIN_ROOT: pluginRoot,
+        AGENTMEMORY_HOOK_LOG: join(tmpdir(), "agentmemory-test-hook-missing.log"),
+      },
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("wrapper exits zero when node is present but the hook process fails", () => {
+    const wrapper = join(pluginRoot, "scripts/run-hook.sh");
+    const result = spawnSync("bash", [wrapper, "post-tool-use.mjs"], {
+      cwd: repoRoot,
+      env: {
+        HOME: process.env["HOME"] ?? "",
+        PATH: process.env["PATH"] ?? "",
+        CLAUDE_PLUGIN_ROOT: pluginRoot,
+        AGENTMEMORY_NODE: "/bin/false",
+        AGENTMEMORY_HOOK_LOG: join(tmpdir(), "agentmemory-test-hook-node-fails.log"),
+      },
+      input: "{}",
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
   });
 });
 
@@ -69,27 +109,23 @@ describe("Codex plugin manifest (developers.openai.com/codex/plugins)", () => {
     expect(existsSync(join(pluginRoot, manifest.hooks))).toBe(true);
   });
 
-  it("plugin MCP server inherits remote agentmemory environment overrides", () => {
+  it("plugin MCP server launches through the env-loading wrapper", () => {
     const mcp = readJson<{
       mcpServers: Record<
         string,
         {
           command: string;
           args: string[];
-          env?: Record<string, string>;
         }
       >;
     }>(join(pluginRoot, ".mcp.json"));
 
-    // env interpolation must include defaults so Claude Code (and
-    // any other MCP host that fails parse on unset ${VAR}) doesn't drop
-    // the server silently when the user hasn't exported the var.
-    expect(mcp.mcpServers.agentmemory?.env?.AGENTMEMORY_URL).toMatch(
-      /\$\{AGENTMEMORY_URL:-/,
-    );
-    expect(mcp.mcpServers.agentmemory?.env?.AGENTMEMORY_SECRET).toMatch(
-      /\$\{AGENTMEMORY_SECRET:-/,
-    );
+    expect(mcp.mcpServers.agentmemory?.command).toBe("bash");
+    expect(mcp.mcpServers.agentmemory?.args[0]).toBe("-lc");
+    expect(mcp.mcpServers.agentmemory?.args[1]).toContain("CLAUDE_PLUGIN_ROOT");
+    expect(mcp.mcpServers.agentmemory?.args[1]).toContain("scripts/run-mcp.sh");
+    expect(mcp.mcpServers.agentmemory?.args[1]).toContain("@agentmemory/mcp");
+    expect(existsSync(join(pluginRoot, "scripts/run-mcp.sh"))).toBe(true);
   });
 
   it("hooks.codex.json contains only events Codex supports (no Subagent / SessionEnd / Notification / TaskCompleted / PostToolUseFailure)", () => {

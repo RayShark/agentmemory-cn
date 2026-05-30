@@ -74,7 +74,10 @@ describe("buildMergedHooks", () => {
     );
     expect(userHook, "user's SessionStart hook should survive").toBeDefined();
     const ours = sessionStart.find((e) =>
-      e.hooks.some((h) => h.command.includes(`${PLUGIN_ROOT}/scripts/session-start.mjs`)),
+      e.hooks.some((h) =>
+        h.command.includes(`${PLUGIN_ROOT}/scripts/run-hook.sh`) &&
+        h.command.includes("session-start.mjs"),
+      ),
     );
     expect(ours, "agentmemory SessionStart hook should be appended").toBeDefined();
   });

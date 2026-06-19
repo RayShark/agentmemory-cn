@@ -1086,7 +1086,7 @@ async function runStatus() {
       apiFetch<any>(base, "health"),
       apiFetch<any>(base, "sessions"),
       apiFetch<any>(base, "graph/stats"),
-      apiFetch<any>(base, "export"),
+      apiFetch<any>(base, "memories?count=true"),
       apiFetch<any>(base, "config/flags"),
     ]);
 
@@ -1096,15 +1096,20 @@ async function runStatus() {
     const h = healthRes?.health;
     const status = healthRes?.status || "unknown";
     const version = healthRes?.version || "?";
-    const sessions = Array.isArray(sessionsRes?.sessions) ? sessionsRes.sessions.length : 0;
+    const sessionRows = Array.isArray(sessionsRes?.sessions) ? sessionsRes.sessions : [];
+    const sessions = sessionRows.length;
     const nodes = Number(graphRes?.totalNodes ?? graphRes?.nodes ?? graphRes?.nodeCount ?? 0);
     const edges = Number(graphRes?.totalEdges ?? graphRes?.edges ?? graphRes?.edgeCount ?? 0);
     const cb = healthRes?.circuitBreaker?.state || "closed";
     const heapMB = h?.memory ? Math.round(h.memory.heapUsed / 1048576) : 0;
     const uptime = h?.uptimeSeconds ? Math.round(h.uptimeSeconds) : 0;
 
-    const obsCount = memoriesRes?.observations?.length || 0;
-    const memCount = memoriesRes?.memories?.length || 0;
+    const obsCount = sessionRows.reduce(
+      (sum: number, session: { observationCount?: unknown }) =>
+        sum + (typeof session.observationCount === "number" ? session.observationCount : 0),
+      0,
+    );
+    const memCount = Number(memoriesRes?.latestCount ?? memoriesRes?.total ?? 0);
     const estFullTokens = obsCount * 80;
     const estInjectedTokens = Math.min(obsCount, 50) * 38;
     const tokensSaved = estFullTokens - estInjectedTokens;

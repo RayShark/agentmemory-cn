@@ -221,8 +221,24 @@ export const CORE_TOOLS: McpToolDef[] = [
   },
   {
     name: "memory_export",
-    description: "Export all memory data as JSON.",
-    inputSchema: { type: "object", properties: {} },
+    description: "Export memory data as JSON. Defaults to a bounded session page; set full=true for full export.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        maxSessions: {
+          type: "number",
+          description: "Maximum sessions to export (default 100, max 1000)",
+        },
+        offset: {
+          type: "number",
+          description: "Session offset for pagination (default 0)",
+        },
+        full: {
+          type: "boolean",
+          description: "Set true to include all sessions and global scopes",
+        },
+      },
+    },
   },
   {
     name: "memory_relations",

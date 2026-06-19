@@ -82,6 +82,20 @@ function parseLimit(raw: unknown, fallback = DEFAULT_LIMIT): number {
   return Math.min(Math.floor(n), MAX_LIMIT);
 }
 
+function parsePositiveInt(raw: unknown, max: number): number | undefined {
+  if (typeof raw !== "number" && typeof raw !== "string") return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return undefined;
+  return Math.min(n, max);
+}
+
+function parseNonNegativeInt(raw: unknown): number | undefined {
+  if (typeof raw !== "number" && typeof raw !== "string") return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return undefined;
+  return n;
+}
+
 function textResponse(payload: unknown, pretty = false): {
   content: Array<{ type: string; text: string }>;
 } {
@@ -104,6 +118,9 @@ interface Validated {
   tokenBudget?: number;
   memoryIds?: string[];
   reason?: string;
+  maxSessions?: number;
+  offset?: number;
+  full?: boolean;
 }
 
 function validate(toolName: string, args: Record<string, unknown>): Validated {
@@ -155,8 +172,12 @@ function validate(toolName: string, args: Record<string, unknown>): Validated {
       v.reason = (args["reason"] as string) || "plugin skill request";
       return v;
     }
-    case "memory_export":
+    case "memory_export": {
+      v.maxSessions = parsePositiveInt(args["maxSessions"], 1000);
+      v.offset = parseNonNegativeInt(args["offset"]);
+      v.full = args["full"] === true || args["full"] === "true";
       return v;
+    }
     case "memory_audit": {
       v.limit = parseLimit(args["limit"], 50);
       return v;
@@ -221,7 +242,14 @@ async function handleProxy(
       return textResponse(result);
     }
     case "memory_export": {
-      const result = await handle.call("/agentmemory/export", { method: "GET" });
+      const qs = new URLSearchParams();
+      if (v.full) qs.set("full", "true");
+      if (!v.full) qs.set("maxSessions", String(v.maxSessions ?? 100));
+      if (v.offset !== undefined) qs.set("offset", String(v.offset));
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      const result = await handle.call(`/agentmemory/export${suffix}`, {
+        method: "GET",
+      });
       return textResponse(result, true);
     }
     case "memory_audit": {

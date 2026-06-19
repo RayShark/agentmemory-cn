@@ -28,11 +28,21 @@ describe("memories + export pagination (#544)", () => {
   it("api::export passes through maxSessions + offset query params", () => {
     expect(api).toMatch(/query_params\?\.\["maxSessions"\]/);
     expect(api).toMatch(/query_params\?\.\["offset"\]/);
+    expect(api).toMatch(/query_params\?\.\["full"\]\s*===\s*"true"/);
+    expect(api).toMatch(/payload\.maxSessions\s*=\s*100/);
+    expect(api).toMatch(/payload\.includeGlobal\s*=\s*true/);
     // The payload object is named `payload` in our handler; assert it is
     // forwarded to mem::export rather than the previous empty object.
     expect(api).toMatch(
       /sdk\.trigger\(\{\s*function_id:\s*"mem::export",\s*payload,/m,
     );
+  });
+
+  it("mcp memory_export defaults to bounded export", () => {
+    const server = readFileSync("src/mcp/server.ts", "utf-8");
+    expect(server).toMatch(/case "memory_export"/);
+    expect(server).toMatch(/payload\.maxSessions\s*=\s*100/);
+    expect(server).toMatch(/payload\.includeGlobal\s*=\s*true/);
   });
 
   it("viewer dashboard caps memories?latest fetch with limit", () => {

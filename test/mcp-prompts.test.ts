@@ -86,6 +86,67 @@ describe("MCP Prompts", () => {
     expect(result.body.prompts).toHaveLength(3);
   });
 
+  it("returns a tool error when memory slots are disabled", async () => {
+    const fn = sdk.getFunction("mcp::tools::call")!;
+    const result = (await fn(
+      makeReq({
+        name: "memory_slot_get",
+        arguments: { label: "persona" },
+      }),
+    )) as {
+      status_code: number;
+      body: { content: Array<{ text: string }>; isError?: boolean };
+    };
+
+    expect(result.status_code).toBe(200);
+    expect(result.body.isError).toBe(true);
+    expect(result.body.content[0].text).toContain("AGENTMEMORY_SLOTS=true");
+  });
+
+  it("memory_export defaults to a bounded session page", async () => {
+    let payload: unknown;
+    sdk.overrideTrigger("mem::export", async (data: unknown) => {
+      payload = data;
+      return { sessions: [], observations: {}, memories: [], summaries: [] };
+    });
+
+    const fn = sdk.getFunction("mcp::tools::call")!;
+    const result = (await fn(
+      makeReq({
+        name: "memory_export",
+        arguments: {},
+      }),
+    )) as {
+      status_code: number;
+      body: { content: Array<{ text: string }> };
+    };
+
+    expect(result.status_code).toBe(200);
+    expect(payload).toEqual({ maxSessions: 100 });
+  });
+
+  it("memory_export can opt into a full export", async () => {
+    let payload: unknown;
+    sdk.overrideTrigger("mem::export", async (data: unknown) => {
+      payload = data;
+      return { sessions: [], observations: {}, memories: [], summaries: [] };
+    });
+
+    const fn = sdk.getFunction("mcp::tools::call")!;
+    const result = (await fn(
+      makeReq({
+        name: "memory_export",
+        arguments: { full: true },
+      }),
+    )) as {
+      status_code: number;
+      body: { content: Array<{ text: string }> };
+    };
+
+    expect(result.status_code).toBe(200);
+    expect(payload).toEqual({ includeGlobal: true });
+  });
+
   it("recall_context returns messages with search results", async () => {
     sdk.overrideTrigger("mem::search", async () => ({
       results: [{ observation: { title: "Found something" } }],

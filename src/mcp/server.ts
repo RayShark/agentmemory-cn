@@ -11,6 +11,7 @@ import type {
 import { getVisibleTools } from "./tools-registry.js";
 import { timingSafeCompare } from "../auth.js";
 import { getLocale } from "../config.js";
+import { isSlotsEnabled } from "../functions/slots.js";
 
 type McpResponse = {
   status_code: number;
@@ -38,6 +39,18 @@ function parseCsvList(value: unknown): string[] {
       .filter(Boolean);
   }
   return [];
+}
+
+function slotToolsDisabledBody(): { content: Array<{ type: "text"; text: string }>; isError: true } {
+  return {
+    content: [
+      {
+        type: "text",
+        text: "Memory slots are disabled. Set AGENTMEMORY_SLOTS=true and restart agentmemory.",
+      },
+    ],
+    isError: true,
+  };
 }
 
 export function registerMcpEndpoints(
@@ -347,7 +360,36 @@ export function registerMcpEndpoints(
           }
 
           case "memory_export": {
-            const result = await sdk.trigger({ function_id: "mem::export", payload: {} });
+            const full = args.full === true || args.full === "true";
+            const payload: {
+              maxSessions?: number;
+              offset?: number;
+              includeGlobal?: boolean;
+            } = {};
+            const rawMax = typeof args.maxSessions === "number"
+              ? args.maxSessions
+              : typeof args.maxSessions === "string"
+                ? Number(args.maxSessions)
+                : Number.NaN;
+            if (Number.isInteger(rawMax) && rawMax > 0) {
+              payload.maxSessions = rawMax;
+            }
+            if (!full && payload.maxSessions === undefined) {
+              payload.maxSessions = 100;
+            }
+            const rawOffset = typeof args.offset === "number"
+              ? args.offset
+              : typeof args.offset === "string"
+                ? Number(args.offset)
+                : Number.NaN;
+            if (Number.isInteger(rawOffset) && rawOffset >= 0) {
+              payload.offset = rawOffset;
+            }
+            if (full) payload.includeGlobal = true;
+            const result = await sdk.trigger({
+              function_id: "mem::export",
+              payload,
+            });
             return {
               status_code: 200,
               body: {
@@ -1136,6 +1178,9 @@ export function registerMcpEndpoints(
           }
 
           case "memory_slot_list": {
+            if (!isSlotsEnabled()) {
+              return { status_code: 200, body: slotToolsDisabledBody() };
+            }
             const result = await sdk.trigger({ function_id: "mem::slot-list", payload: {} });
             return {
               status_code: 200,
@@ -1146,6 +1191,9 @@ export function registerMcpEndpoints(
           case "memory_slot_get": {
             const label = asNonEmptyString(args.label);
             if (!label) return { status_code: 400, body: { error: "label required" } };
+            if (!isSlotsEnabled()) {
+              return { status_code: 200, body: slotToolsDisabledBody() };
+            }
             const result = await sdk.trigger({ function_id: "mem::slot-get", payload: { label } });
             return {
               status_code: 200,
@@ -1156,6 +1204,9 @@ export function registerMcpEndpoints(
           case "memory_slot_create": {
             const label = asNonEmptyString(args.label);
             if (!label) return { status_code: 400, body: { error: "label required" } };
+            if (!isSlotsEnabled()) {
+              return { status_code: 200, body: slotToolsDisabledBody() };
+            }
             const payload: Record<string, unknown> = { label };
             if (typeof args.content === "string") payload.content = args.content;
             if (typeof args.description === "string") payload.description = args.description;
@@ -1176,6 +1227,9 @@ export function registerMcpEndpoints(
             const label = asNonEmptyString(args.label);
             const text = typeof args.text === "string" ? args.text : null;
             if (!label || !text) return { status_code: 400, body: { error: "label and text required" } };
+            if (!isSlotsEnabled()) {
+              return { status_code: 200, body: slotToolsDisabledBody() };
+            }
             const result = await sdk.trigger({ function_id: "mem::slot-append", payload: { label, text } });
             return {
               status_code: 200,
@@ -1188,6 +1242,9 @@ export function registerMcpEndpoints(
             if (!label || typeof args.content !== "string") {
               return { status_code: 400, body: { error: "label and content (string) required" } };
             }
+            if (!isSlotsEnabled()) {
+              return { status_code: 200, body: slotToolsDisabledBody() };
+            }
             const result = await sdk.trigger({ function_id: "mem::slot-replace", payload: { label, content: args.content } });
             return {
               status_code: 200,
@@ -1198,6 +1255,9 @@ export function registerMcpEndpoints(
           case "memory_slot_delete": {
             const label = asNonEmptyString(args.label);
             if (!label) return { status_code: 400, body: { error: "label required" } };
+            if (!isSlotsEnabled()) {
+              return { status_code: 200, body: slotToolsDisabledBody() };
+            }
             const result = await sdk.trigger({ function_id: "mem::slot-delete", payload: { label } });
             return {
               status_code: 200,

@@ -23,6 +23,7 @@ import {
   isAgentScopeIsolated,
 } from "../config.js";
 import { t } from "../i18n/index.js";
+import { isSlotsEnabled } from "../functions/slots.js";
 
 type Response = {
   status_code: number;
@@ -115,6 +116,15 @@ function consolidationDisabledResponse(): Response {
     flag: "CONSOLIDATION_ENABLED",
     enableHow: apiT("featureDisabled.consolidation.enableHow"),
     docsHref: "https://github.com/rohitg00/agentmemory#consolidation",
+  });
+}
+
+function slotsDisabledResponse(): Response {
+  return flagDisabledResponse({
+    error: apiT("featureDisabled.slots.error"),
+    flag: "AGENTMEMORY_SLOTS",
+    enableHow: apiT("featureDisabled.slots.enableHow"),
+    docsHref: "https://github.com/rohitg00/agentmemory#memory-slots",
   });
 }
 
@@ -1113,22 +1123,30 @@ export function registerApiTriggers(
     async (req: ApiRequest): Promise<Response> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
-      // mem::export already supports maxSessions/offset internally,
-      // but the HTTP endpoint hardcoded an empty payload — so /export on a
-      // real corpus (40 sessions × 34K observations × 8K memories) hit the
-      // iii engine invocation timeout and `agentmemory status` reported 0.
-      // Pass through the query-string pagination so callers can chunk.
+      // Keep the public HTTP endpoint bounded by default. A full export can
+      // still be requested explicitly with ?full=true, but interactive clients
+      // like `agentmemory status` should not be able to restart the worker by
+      // accidentally pulling every global scope into one response.
       const rawMax = req.query_params?.["maxSessions"];
       const rawOffset = req.query_params?.["offset"];
-      const payload: { maxSessions?: number; offset?: number } = {};
+      const full = req.query_params?.["full"] === "true";
+      const payload: {
+        maxSessions?: number;
+        offset?: number;
+        includeGlobal?: boolean;
+      } = {};
       if (typeof rawMax === "string") {
         const n = Number(rawMax);
         if (Number.isInteger(n) && n > 0) payload.maxSessions = n;
+      }
+      if (!full && payload.maxSessions === undefined) {
+        payload.maxSessions = 100;
       }
       if (typeof rawOffset === "string") {
         const n = Number(rawOffset);
         if (Number.isInteger(n) && n >= 0) payload.offset = n;
       }
+      if (full) payload.includeGlobal = true;
       const result = await sdk.trigger({
         function_id: "mem::export",
         payload,
@@ -1774,6 +1792,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-list", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const result = await sdk.trigger({ function_id: "mem::slot-list", payload: {} });
     return { status_code: 200, body: result };
   });
@@ -1786,6 +1805,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-get", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const label = asNonEmptyString(req.query_params?.["label"]);
     if (!label) return { status_code: 400, body: apiError("queryParamRequired", { field: "label" }) };
     const result = await sdk.trigger({ function_id: "mem::slot-get", payload: { label } });
@@ -1804,6 +1824,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-create", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const body = (req.body ?? {}) as Record<string, unknown>;
     const label = asNonEmptyString(body["label"]);
     if (!label) return { status_code: 400, body: apiFieldRequired("label") };
@@ -1853,6 +1874,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-append", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const body = (req.body ?? {}) as Record<string, unknown>;
     const label = asNonEmptyString(body["label"]);
     const text = typeof body["text"] === "string" ? body["text"] : null;
@@ -1875,6 +1897,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-replace", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const body = (req.body ?? {}) as Record<string, unknown>;
     const label = asNonEmptyString(body["label"]);
     const content = body["content"];
@@ -1899,6 +1922,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-delete", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const label = asNonEmptyString(req.query_params?.["label"]);
     if (!label) return { status_code: 400, body: apiError("queryParamRequired", { field: "label" }) };
     const result = await sdk.trigger({ function_id: "mem::slot-delete", payload: { label } });
@@ -1917,6 +1941,7 @@ export function registerApiTriggers(
   sdk.registerFunction("api::slot-reflect", async (req: ApiRequest): Promise<Response> => {
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
+    if (!isSlotsEnabled()) return slotsDisabledResponse();
     const body = (req.body ?? {}) as Record<string, unknown>;
     const sessionId = asNonEmptyString(body["sessionId"]);
     if (!sessionId) return { status_code: 400, body: apiFieldRequired("sessionId") };

@@ -552,7 +552,7 @@
       "memory_vision_search": {"description":"通过 CLIP embeddings 进行跨模态图片搜索。传入 queryText 查找匹配描述的截图，或传入 queryImageBase64/queryImageRef 查找相似图片。需要 AGENTMEMORY_IMAGE_EMBEDDINGS=true。","properties":{"queryText":"文本查询（例如 'login form with error banner'）","queryImageRef":"要匹配的已存储图片绝对路径","queryImageBase64":"原始 base64 图片字节或 data URL","topK":"返回结果上限（默认 10，最大 50）","sessionId":"限制到单个 session"}},
       "memory_timeline": {"description":"围绕锚点按时间顺序返回观察。","properties":{"anchor":"锚点：ISO date 或 keyword","project":"按项目路径过滤","before":"锚点之前的观察数量（默认 5）","after":"锚点之后的观察数量（默认 5）"}},
       "memory_profile": {"description":"包含高频概念和文件模式的用户/项目画像。","properties":{"project":"项目路径","refresh":"设为 'true' 强制重建"}},
-      "memory_export": {"description":"以 JSON 导出全部记忆数据。","properties":{}},
+      "memory_export": {"description":"以 JSON 导出记忆数据。默认导出有界 session 分页；设置 full=true 才导出全量。","properties":{"maxSessions":"要导出的最大 session 数（默认 100，最大 1000）","offset":"session 分页偏移量（默认 0）","full":"设为 true 时包含所有 sessions 和全局 scopes"}},
       "memory_relations": {"description":"查询记忆关系图。","properties":{"memoryId":"要查找关系的 memory ID","maxHops":"最大遍历深度（默认 2）","minConfidence":"最小置信度（0-1，默认 0）"}},
       "memory_commit_lookup": {"description":"根据 SHA 查找生成指定 git commit 的 agent session。返回 commit 元数据和关联 session。","properties":{"sha":"完整 git commit SHA"}},
       "memory_commits": {"description":"列出关联到 agent sessions 的最近 commits，可按 branch 或 repo 过滤。","properties":{"branch":"按 branch name 过滤","repo":"按 remote URL 过滤","limit":"返回结果上限（默认 100，最大 500）"}},
@@ -641,6 +641,10 @@
       "consolidation": {
         "error": "记忆整合流水线未启用",
         "enableHow": "设置 CONSOLIDATION_ENABLED=true 并重启。需要配置 LLM 提供方密钥。"
+      },
+      "slots": {
+        "error": "Memory slots 未启用",
+        "enableHow": "设置 AGENTMEMORY_SLOTS=true 并重启。"
       }
     }
   },

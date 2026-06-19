@@ -2,10 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { registerApiTriggers } from "../src/triggers/api.js";
 
 const ORIGINAL_LOCALE = process.env["AGENTMEMORY_LOCALE"];
+const ORIGINAL_SLOTS = process.env["AGENTMEMORY_SLOTS"];
 
 afterEach(() => {
   if (ORIGINAL_LOCALE === undefined) delete process.env["AGENTMEMORY_LOCALE"];
   else process.env["AGENTMEMORY_LOCALE"] = ORIGINAL_LOCALE;
+  if (ORIGINAL_SLOTS === undefined) delete process.env["AGENTMEMORY_SLOTS"];
+  else process.env["AGENTMEMORY_SLOTS"] = ORIGINAL_SLOTS;
 });
 
 describe("REST API i18n", () => {
@@ -115,6 +118,33 @@ describe("REST API i18n", () => {
     expect((response.body as { enableHow: string }).enableHow).toContain(
       "GRAPH_EXTRACTION_ENABLED=true",
     );
+  });
+
+  it("returns a localized feature-disabled response for slot endpoints when slots are off", async () => {
+    delete process.env["AGENTMEMORY_SLOTS"];
+    let slotListHandler:
+      | ((req: { headers?: Record<string, string> }) => Promise<{ status_code: number; body: unknown }>)
+      | undefined;
+    const sdk = {
+      registerFunction: vi.fn((id: string, cb: typeof slotListHandler) => {
+        if (id === "api::slot-list") slotListHandler = cb;
+      }),
+      registerTrigger: vi.fn(),
+      trigger: vi.fn(async () => {
+        throw new Error("mem::slot-list should not be called");
+      }),
+    } as unknown as import("iii-sdk").ISdk;
+
+    registerApiTriggers(sdk, {} as never);
+    if (!slotListHandler) throw new Error("api::slot-list not registered");
+
+    const response = await slotListHandler({});
+    expect(response.status_code).toBe(503);
+    expect(response.body).toMatchObject({
+      error: "Memory slots 未启用",
+      flag: "AGENTMEMORY_SLOTS",
+    });
+    expect(sdk.trigger).not.toHaveBeenCalled();
   });
 
   it("localizes compress-file missing filePath errors", async () => {

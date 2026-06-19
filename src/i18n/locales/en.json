@@ -560,6 +560,10 @@
       "consolidation": {
         "error": "Consolidation pipeline not enabled",
         "enableHow": "Set CONSOLIDATION_ENABLED=true and restart. Requires an LLM provider key."
+      },
+      "slots": {
+        "error": "Memory slots not enabled",
+        "enableHow": "Set AGENTMEMORY_SLOTS=true and restart."
       }
     }
   },

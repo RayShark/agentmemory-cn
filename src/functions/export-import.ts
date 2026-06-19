@@ -31,21 +31,31 @@ import { VERSION } from "../version.js";
 import { recordAudit } from "./audit.js";
 import { logger } from "../logger.js";
 
+type ExportOptions = {
+  maxSessions?: number;
+  offset?: number;
+  includeGlobal?: boolean;
+};
+
 export function registerExportImportFunction(sdk: ISdk, kv: StateKV): void {
   sdk.registerFunction("mem::export", 
-    async (data?: { maxSessions?: number; offset?: number }) => {
+    async (data?: ExportOptions) => {
       const rawMax = Number(data?.maxSessions);
       const maxSessions = Number.isFinite(rawMax) && rawMax > 0 ? Math.min(Math.floor(rawMax), 1000) : undefined;
       const rawOffset = Number(data?.offset);
       const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? Math.floor(rawOffset) : 0;
+      const scopedToSessionPage = maxSessions !== undefined && data?.includeGlobal !== true;
 
       const allSessions = await kv.list<Session>(KV.sessions);
-      const paginatedSessions = maxSessions !== undefined
+      const sessionPage = maxSessions !== undefined
         ? allSessions.slice(offset, offset + maxSessions)
         : allSessions;
-      const memories = await kv.list<Memory>(KV.memories);
-      const summaries = await kv.list<SessionSummary>(KV.summaries);
-
+      const paginatedSessions = sessionPage.filter(
+        (session) =>
+          session &&
+          typeof session.id === "string" &&
+          session.id.trim().length > 0,
+      );
       const observations: Record<string, CompressedObservation[]> = {};
       const obsResults = await Promise.all(
         paginatedSessions.map((session) =>
@@ -61,8 +71,31 @@ export function registerExportImportFunction(sdk: ISdk, kv: StateKV): void {
         }
       }
 
+      const memories = scopedToSessionPage
+        ? []
+        : await kv.list<Memory>(KV.memories);
+      const summaries = scopedToSessionPage
+        ? (
+            await Promise.all(
+              paginatedSessions.map((session) =>
+                kv
+                  .get<SessionSummary>(KV.summaries, session.id)
+                  .catch(() => null),
+              ),
+            )
+          ).filter((summary): summary is SessionSummary => summary !== null)
+        : await kv.list<SessionSummary>(KV.summaries);
+
       const profiles: ProjectProfile[] = [];
-      const uniqueProjects = [...new Set(paginatedSessions.map((s) => s.project))];
+      const uniqueProjects = [
+        ...new Set(
+          paginatedSessions
+            .map((s) => s.project)
+            .filter((project): project is string =>
+              typeof project === "string" && project.trim().length > 0,
+            ),
+        ),
+      ];
       const profileResults = await Promise.all(
         uniqueProjects.map((project) =>
           kv.get<ProjectProfile>(KV.profiles, project).catch(() => null),
@@ -72,23 +105,41 @@ export function registerExportImportFunction(sdk: ISdk, kv: StateKV): void {
         if (profile) profiles.push(profile);
       }
 
+      let graphNodes: GraphNode[] = [];
+      let graphEdges: GraphEdge[] = [];
+      let semanticMemories: SemanticMemory[] = [];
+      let proceduralMemories: ProceduralMemory[] = [];
+      let actions: Action[] = [];
+      let actionEdges: ActionEdge[] = [];
+      let sentinels: Sentinel[] = [];
+      let sketches: Sketch[] = [];
+      let crystals: Crystal[] = [];
+      let facets: Facet[] = [];
+      let lessons: Lesson[] = [];
+      let insights: Insight[] = [];
+      let routines: Routine[] = [];
+      let signals: Signal[] = [];
+      let checkpoints: Checkpoint[] = [];
+      let accessLogs: AccessLogExport[] = [];
+
+      if (!scopedToSessionPage) {
       const [
-        graphNodes,
-        graphEdges,
-        semanticMemories,
-        proceduralMemories,
-        actions,
-        actionEdges,
-        sentinels,
-        sketches,
-        crystals,
-        facets,
-        lessons,
-        insights,
-        routines,
-        signals,
-        checkpoints,
-        accessLogs,
+        allGraphNodes,
+        allGraphEdges,
+        allSemanticMemories,
+        allProceduralMemories,
+        allActions,
+        allActionEdges,
+        allSentinels,
+        allSketches,
+        allCrystals,
+        allFacets,
+        allLessons,
+        allInsights,
+        allRoutines,
+        allSignals,
+        allCheckpoints,
+        allAccessLogs,
       ] = await Promise.all([
         kv.list<GraphNode>(KV.graphNodes).catch(() => []),
         kv.list<GraphEdge>(KV.graphEdges).catch(() => []),
@@ -107,6 +158,23 @@ export function registerExportImportFunction(sdk: ISdk, kv: StateKV): void {
         kv.list<Checkpoint>(KV.checkpoints).catch(() => []),
         kv.list<AccessLogExport>(KV.accessLog).catch(() => []),
       ]);
+        graphNodes = allGraphNodes;
+        graphEdges = allGraphEdges;
+        semanticMemories = allSemanticMemories;
+        proceduralMemories = allProceduralMemories;
+        actions = allActions;
+        actionEdges = allActionEdges;
+        sentinels = allSentinels;
+        sketches = allSketches;
+        crystals = allCrystals;
+        facets = allFacets;
+        lessons = allLessons;
+        insights = allInsights;
+        routines = allRoutines;
+        signals = allSignals;
+        checkpoints = allCheckpoints;
+        accessLogs = allAccessLogs;
+      }
 
       const exportData: ExportData = {
         version: VERSION,
@@ -155,6 +223,7 @@ export function registerExportImportFunction(sdk: ISdk, kv: StateKV): void {
         observations: totalObs,
         memories: memories.length,
         summaries: summaries.length,
+        scopedToSessionPage,
       });
 
       return exportData;

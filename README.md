@@ -841,7 +841,7 @@ npm install @xenova/transformers
 | `memory_sessions` | List recent sessions |
 | `memory_timeline` | Chronological observations |
 | `memory_profile` | Project profile (concepts, files, patterns) |
-| `memory_export` | Export all memory data |
+| `memory_export` | Export memory data (bounded page by default; set `full=true` for full export) |
 | `memory_relations` | Query relationship graph |
 
 </details>
@@ -1347,7 +1347,7 @@ Create `~/.agentmemory/.env`:
 | `POST` | `/agentmemory/forget` | Delete observations |
 | `POST` | `/agentmemory/enrich` | File context + memories + bugs |
 | `GET` | `/agentmemory/profile` | Project profile |
-| `GET` | `/agentmemory/export` | Export all data |
+| `GET` | `/agentmemory/export` | Export memory data (bounded page by default; add `full=true` for full export) |
 | `POST` | `/agentmemory/import` | Import from JSON |
 | `POST` | `/agentmemory/graph/query` | Knowledge graph query |
 | `POST` | `/agentmemory/team/share` | Share with team |

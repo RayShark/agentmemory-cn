@@ -15,23 +15,30 @@ import type {
 
 function mockKV() {
   const store = new Map<string, Map<string, unknown>>();
-  return {
+  const calls: Array<{ op: string; scope: string; key?: string }> = [];
+  const kv = {
     get: async <T>(scope: string, key: string): Promise<T | null> => {
+      calls.push({ op: "get", scope, key });
       return (store.get(scope)?.get(key) as T) ?? null;
     },
     set: async <T>(scope: string, key: string, data: T): Promise<T> => {
+      calls.push({ op: "set", scope, key });
       if (!store.has(scope)) store.set(scope, new Map());
       store.get(scope)!.set(key, data);
       return data;
     },
     delete: async (scope: string, key: string): Promise<void> => {
+      calls.push({ op: "delete", scope, key });
       store.get(scope)?.delete(key);
     },
     list: async <T>(scope: string): Promise<T[]> => {
+      calls.push({ op: "list", scope });
       const entries = store.get(scope);
       return entries ? (Array.from(entries.values()) as T[]) : [];
     },
+    calls,
   };
+  return kv;
 }
 
 function mockSdk() {
@@ -99,6 +106,43 @@ const testSummary: SessionSummary = {
   filesModified: ["src/auth.ts"],
   concepts: ["auth"],
   observationCount: 1,
+};
+
+const otherSession: Session = {
+  ...testSession,
+  id: "ses_2",
+  project: "other-project",
+  observationCount: 1,
+};
+
+const otherObs: CompressedObservation = {
+  ...testObs,
+  id: "obs_2",
+  sessionId: "ses_2",
+  title: "Other edit",
+};
+
+const otherMemory: Memory = {
+  ...testMemory,
+  id: "mem_2",
+  title: "Other pattern",
+  sessionIds: ["ses_2"],
+  sourceObservationIds: ["obs_2"],
+};
+
+const unrelatedMemory: Memory = {
+  ...testMemory,
+  id: "mem_3",
+  title: "Unrelated pattern",
+  sessionIds: ["ses_missing"],
+  sourceObservationIds: ["obs_missing"],
+};
+
+const otherSummary: SessionSummary = {
+  ...testSummary,
+  sessionId: "ses_2",
+  project: "other-project",
+  title: "Other work",
 };
 
 describe("Export/Import Functions", () => {
@@ -248,5 +292,98 @@ describe("Export/Import Functions", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Unsupported export version");
+  });
+
+  it("scopes paginated export to the selected session page", async () => {
+    await kv.set("mem:sessions", "ses_2", otherSession);
+    await kv.set("mem:obs:ses_2", "obs_2", otherObs);
+    await kv.set("mem:memories", "mem_2", otherMemory);
+    await kv.set("mem:memories", "mem_3", unrelatedMemory);
+    await kv.set("mem:summaries", "ses_2", otherSummary);
+    await kv.set("mem:graph:nodes", "node_1", {
+      id: "node_1",
+      type: "concept",
+      name: "large-global-scope",
+      properties: {},
+      sourceObservationIds: ["obs_2"],
+      createdAt: "2026-02-01T00:00:00Z",
+    });
+    await kv.set("mem:access", "mem_1", {
+      memoryId: "mem_1",
+      count: 1,
+      lastAt: "2026-02-01T00:00:00Z",
+      recent: [1],
+    });
+    await kv.set("mem:access", "mem_2", {
+      memoryId: "mem_2",
+      count: 1,
+      lastAt: "2026-02-01T00:00:00Z",
+      recent: [1],
+    });
+
+    const result = (await sdk.trigger("mem::export", {
+      maxSessions: 1,
+      offset: 0,
+    })) as ExportData;
+
+    expect(result.pagination).toMatchObject({
+      offset: 0,
+      limit: 1,
+      total: 2,
+      hasMore: true,
+    });
+    expect(result.sessions.map((s) => s.id)).toEqual(["ses_1"]);
+    expect(Object.keys(result.observations)).toEqual(["ses_1"]);
+    expect(result.summaries.map((s) => s.sessionId)).toEqual(["ses_1"]);
+    expect(result.memories).toEqual([]);
+    expect(result.accessLogs).toBeUndefined();
+    expect(result.graphNodes).toBeUndefined();
+  });
+
+  it("paginated export skips malformed session keys", async () => {
+    await kv.set("mem:sessions", "bad", {
+      project: undefined,
+      cwd: undefined,
+      startedAt: "2026-02-01T00:00:00Z",
+      status: "completed",
+      observationCount: 0,
+    });
+
+    const result = (await sdk.trigger("mem::export", {
+      maxSessions: 10,
+    })) as ExportData;
+
+    expect(result.sessions.map((s) => s.id)).toEqual(["ses_1"]);
+    expect(result.pagination?.total).toBe(2);
+    expect(
+      kv.calls.some((call) => call.op === "get" && call.key === undefined),
+    ).toBe(false);
+  });
+
+  it("full paginated export can opt into global scopes", async () => {
+    await kv.set("mem:sessions", "ses_2", otherSession);
+    await kv.set("mem:memories", "mem_2", otherMemory);
+    await kv.set("mem:summaries", "ses_2", otherSummary);
+    await kv.set("mem:graph:nodes", "node_1", {
+      id: "node_1",
+      type: "concept",
+      name: "global-scope",
+      properties: {},
+      sourceObservationIds: [],
+      createdAt: "2026-02-01T00:00:00Z",
+    });
+
+    const result = (await sdk.trigger("mem::export", {
+      maxSessions: 1,
+      includeGlobal: true,
+    })) as ExportData;
+
+    expect(result.sessions.map((s) => s.id)).toEqual(["ses_1"]);
+    expect(result.memories.map((m) => m.id).sort()).toEqual(["mem_1", "mem_2"]);
+    expect(result.summaries.map((s) => s.sessionId).sort()).toEqual([
+      "ses_1",
+      "ses_2",
+    ]);
+    expect(result.graphNodes?.map((n) => n.id)).toEqual(["node_1"]);
   });
 });

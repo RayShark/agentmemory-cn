@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { registerContextFunction } from "../src/functions/context.js";
 import { KV } from "../src/state/schema.js";
 import type { Lesson } from "../src/types.js";
@@ -75,10 +75,21 @@ async function seedLesson(
 describe("mem::context — lessons auto-injection (#457)", () => {
   let kv: ReturnType<typeof mockKV>;
   let handler: ContextHandler;
+  const originalLocale = process.env["AGENTMEMORY_LOCALE"];
+  const originalViewerLanguage = process.env["VIEWER_LANGUAGE"];
 
   beforeEach(() => {
+    process.env["AGENTMEMORY_LOCALE"] = "en";
+    process.env["VIEWER_LANGUAGE"] = "en";
     kv = mockKV();
     handler = wireContext(kv);
+  });
+
+  afterEach(() => {
+    if (originalLocale === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+    else process.env["AGENTMEMORY_LOCALE"] = originalLocale;
+    if (originalViewerLanguage === undefined) delete process.env["VIEWER_LANGUAGE"];
+    else process.env["VIEWER_LANGUAGE"] = originalViewerLanguage;
   });
 
   it("includes a 'Lessons Learned' block when KV has lessons for the project", async () => {

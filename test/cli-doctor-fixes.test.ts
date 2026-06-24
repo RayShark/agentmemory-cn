@@ -57,6 +57,7 @@ describe("doctor v2 diagnostic catalog", () => {
     expect(DIAGNOSTIC_IDS).toContain("viewer-unreachable");
     expect(DIAGNOSTIC_IDS).toContain("stale-pidfile");
     expect(DIAGNOSTIC_IDS).toContain("env-placeholder-keys");
+    expect(DIAGNOSTIC_IDS).toContain("high-cost-llm-config");
     expect(DIAGNOSTIC_IDS).toContain("iii-on-path-not-local-bin");
   });
 
@@ -167,6 +168,48 @@ describe("doctor v2 diagnostic catalog", () => {
     const status = await check.check(stubCtx());
     expect(status.ok).toBe(false);
     expect(status.detail).toContain("ANTHROPIC_API_KEY");
+  });
+
+  it("high-cost-llm-config fails for hot-path LLM compression on an expensive OpenAI-compatible model", async () => {
+    const diagnostics = buildDiagnostics(
+      stubEffects({
+        envFileExists: () => true,
+        readEnvFile: () => ({
+          OPENAI_API_KEY: "sk-real-value",
+          OPENAI_MODEL: "gpt-5.5",
+          OPENAI_REASONING_EFFORT: "xhigh",
+          AGENTMEMORY_AUTO_COMPRESS: "true",
+          CONSOLIDATION_ENABLED: "true",
+          GRAPH_EXTRACTION_ENABLED: "true",
+          AGENTMEMORY_INJECT_CONTEXT: "true",
+        }),
+      }),
+    );
+    const check = diagnostics.find((d) => d.id === "high-cost-llm-config")!;
+    const status = await check.check(stubCtx());
+    expect(status.ok).toBe(false);
+    expect(status.detail).toContain("AGENTMEMORY_AUTO_COMPRESS=true");
+    expect(status.detail).toContain("OPENAI_MODEL=gpt-5.5");
+    expect(status.detail).toContain("OPENAI_REASONING_EFFORT=xhigh");
+  });
+
+  it("high-cost-llm-config passes when LLM hot-path flags are disabled", async () => {
+    const diagnostics = buildDiagnostics(
+      stubEffects({
+        envFileExists: () => true,
+        readEnvFile: () => ({
+          OPENAI_API_KEY: "sk-real-value",
+          OPENAI_MODEL: "gpt-4o-mini",
+          AGENTMEMORY_AUTO_COMPRESS: "false",
+          CONSOLIDATION_ENABLED: "false",
+          GRAPH_EXTRACTION_ENABLED: "false",
+          AGENTMEMORY_INJECT_CONTEXT: "false",
+        }),
+      }),
+    );
+    const check = diagnostics.find((d) => d.id === "high-cost-llm-config")!;
+    const status = await check.check(stubCtx());
+    expect(status.ok).toBe(true);
   });
 
   it("iii-on-path-not-local-bin warns when iii lives in another location", async () => {

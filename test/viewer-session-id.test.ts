@@ -1,5 +1,5 @@
 import * as vm from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { renderViewerDocument } from "../src/viewer/document.js";
 
 function htmlEscape(value: string): string {
@@ -179,6 +179,21 @@ function expectTextOrder(html: string, labels: string[]) {
       .toBeLessThan(positions[i]);
   }
 }
+
+const originalLocale = process.env["AGENTMEMORY_LOCALE"];
+const originalViewerLanguage = process.env["VIEWER_LANGUAGE"];
+
+beforeEach(() => {
+  process.env["AGENTMEMORY_LOCALE"] = "en";
+  process.env["VIEWER_LANGUAGE"] = "en";
+});
+
+afterEach(() => {
+  if (originalLocale === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+  else process.env["AGENTMEMORY_LOCALE"] = originalLocale;
+  if (originalViewerLanguage === undefined) delete process.env["VIEWER_LANGUAGE"];
+  else process.env["VIEWER_LANGUAGE"] = originalViewerLanguage;
+});
 
 describe("viewer session rendering", () => {
   it("does not throw when dashboard sessions are missing ids", () => {

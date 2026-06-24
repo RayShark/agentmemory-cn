@@ -257,6 +257,12 @@
         "envMissingDetail": "env 文件缺失（由 env-missing 处理）",
         "placeholderDetail": "placeholder: {{keys}}"
       },
+      "highCostLlmConfig": {
+        "message": "已启用高成本 LLM 后台功能。",
+        "fixPreview": "在 ~/.agentmemory/.env 中关闭热路径 LLM 开关，然后重启 agentmemory。",
+        "moreInfo": "AGENTMEMORY_AUTO_COMPRESS 会把热路径 observations 发给 LLM provider。CONSOLIDATION_ENABLED、GRAPH_EXTRACTION_ENABLED 和 AGENTMEMORY_INJECT_CONTEXT 也会增加后台调用或上游 prompt tokens。除非已经测量过 provider 成本，否则保持关闭。",
+        "envMissingDetail": "env 文件缺失（由 env-missing 处理）"
+      },
       "iiiOnPathNotLocalBin": {
         "message": "iii 在 PATH 上，但不在 ~/.local/bin/iii（agentmemory 安装位置）。",
         "fixPreview": "建议通过 installer 重新安装 pinned version；不会修改你的 PATH。",

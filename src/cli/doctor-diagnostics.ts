@@ -69,6 +69,7 @@ export const DIAGNOSTIC_IDS = [
   "viewer-unreachable",
   "stale-pidfile",
   "env-placeholder-keys",
+  "high-cost-llm-config",
   "iii-on-path-not-local-bin",
 ] as const;
 
@@ -95,6 +96,20 @@ const PROVIDER_KEY_NAMES = [
   "GOOGLE_API_KEY",
   "OPENROUTER_API_KEY",
   "MINIMAX_API_KEY",
+] as const;
+
+const MODEL_KEY_NAMES = [
+  "OPENAI_MODEL",
+  "OPENROUTER_MODEL",
+  "GEMINI_MODEL",
+  "MINIMAX_MODEL",
+] as const;
+
+const HIGH_COST_LLM_FLAGS = [
+  "AGENTMEMORY_AUTO_COMPRESS",
+  "CONSOLIDATION_ENABLED",
+  "GRAPH_EXTRACTION_ENABLED",
+  "AGENTMEMORY_INJECT_CONTEXT",
 ] as const;
 
 export function parseEnvFile(content: string): Record<string, string> {
@@ -139,6 +154,28 @@ export function placeholderProviderKeys(env: Record<string, string>): string[] {
     if (/^x+$/i.test(v.replace(/[-_]/g, ""))) return true;
     return false;
   });
+}
+
+export function highCostLlmConfigDetail(
+  env: Record<string, string>,
+): string | null {
+  const providerKeys = realProviderKeys(env);
+  if (providerKeys.length === 0) return null;
+  const enabledFlags = HIGH_COST_LLM_FLAGS.filter((key) => env[key] === "true");
+  if (enabledFlags.length === 0) return null;
+  const modelSetting = MODEL_KEY_NAMES.flatMap((key) => {
+    const value = env[key]?.trim();
+    return value ? [`${key}=${value}`] : [];
+  });
+  const parts = [
+    `provider keys: ${providerKeys.join(", ")}`,
+    `enabled flags: ${enabledFlags.map((key) => `${key}=true`).join(", ")}`,
+  ];
+  if (modelSetting.length > 0) parts.push(`model settings: ${modelSetting.join(", ")}`);
+  if (env["OPENAI_REASONING_EFFORT"]) {
+    parts.push(`OPENAI_REASONING_EFFORT=${env["OPENAI_REASONING_EFFORT"]}`);
+  }
+  return parts.join("; ");
 }
 
 /**
@@ -297,6 +334,23 @@ export function buildDiagnostics(
             placeholders.length === 0
               ? undefined
               : dt(locale, "envPlaceholderKeys.placeholderDetail", { keys: placeholders.join(", ") }),
+        };
+      },
+      fix: (ctx) => effects.openEditor(ctx.envPath),
+    },
+    {
+      id: "high-cost-llm-config",
+      message: dt(locale, "highCostLlmConfig.message"),
+      fixPreview: dt(locale, "highCostLlmConfig.fixPreview"),
+      moreInfo: dt(locale, "highCostLlmConfig.moreInfo"),
+      check: async () => {
+        if (!effects.envFileExists()) {
+          return { ok: true, detail: dt(locale, "highCostLlmConfig.envMissingDetail") };
+        }
+        const detail = highCostLlmConfigDetail(effects.readEnvFile());
+        return {
+          ok: detail === null,
+          detail: detail ?? undefined,
         };
       },
       fix: (ctx) => effects.openEditor(ctx.envPath),

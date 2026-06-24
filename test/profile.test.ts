@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("../src/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -53,8 +53,12 @@ function mockSdk() {
 describe("Profile Function", () => {
   let sdk: ReturnType<typeof mockSdk>;
   let kv: ReturnType<typeof mockKV>;
+  const originalLocale = process.env["AGENTMEMORY_LOCALE"];
+  const originalViewerLanguage = process.env["VIEWER_LANGUAGE"];
 
   beforeEach(async () => {
+    process.env["AGENTMEMORY_LOCALE"] = "en";
+    process.env["VIEWER_LANGUAGE"] = "en";
     sdk = mockSdk();
     kv = mockKV();
     registerProfileFunction(sdk as never, kv as never);
@@ -109,6 +113,13 @@ describe("Profile Function", () => {
     await kv.set("mem:obs:ses_1", "obs_1", obs1);
     await kv.set("mem:obs:ses_1", "obs_2", obs2);
     await kv.set("mem:obs:ses_1", "obs_3", obs3);
+  });
+
+  afterEach(() => {
+    if (originalLocale === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+    else process.env["AGENTMEMORY_LOCALE"] = originalLocale;
+    if (originalViewerLanguage === undefined) delete process.env["VIEWER_LANGUAGE"];
+    else process.env["VIEWER_LANGUAGE"] = originalViewerLanguage;
   });
 
   it("generates profile with topConcepts sorted by frequency", async () => {

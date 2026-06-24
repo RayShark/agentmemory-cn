@@ -72,13 +72,18 @@ following to your platform's environment variables (Fly:
 | `OPENROUTER_API_KEY`      | LLM provider alternative                                 |
 | `OPENAI_API_KEY`          | Embedding provider (text-embedding-3-small by default)   |
 | `VOYAGE_API_KEY`          | Embedding provider alternative                           |
-| `AGENTMEMORY_AUTO_COMPRESS=true` | Run LLM compression on every observation batch    |
-| `AGENTMEMORY_INJECT_CONTEXT=true` | Inject recalled memories back into agent prompts |
+| `AGENTMEMORY_AUTO_COMPRESS=false` | Keep hot-path LLM compression off by default     |
+| `AGENTMEMORY_INJECT_CONTEXT=false` | Keep prompt context injection off by default    |
+| `AGENTMEMORY_LLM_CONCURRENCY=1` | Cap OpenAI-compatible LLM calls for hooks/background jobs |
 
 The defaults are intentionally conservative: provider keys default to
 absent (no third-party calls), `AGENTMEMORY_AUTO_COMPRESS` is off,
 and `AGENTMEMORY_INJECT_CONTEXT` is off. Opt in only after you've
 confirmed your provider quota can absorb the workload.
+
+If you set either flag to `true`, treat it as a high-cost mode: active
+agent sessions can produce LLM work proportional to hook and tool-call
+frequency.
 
 ## Cold-start budget
 

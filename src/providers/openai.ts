@@ -11,6 +11,11 @@ import {
 
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_LLM_CONCURRENCY = 1;
+const VALID_REASONING_EFFORTS = new Set(["none", "low", "medium", "high"]);
+
+let activeOpenAiCalls = 0;
+const openAiWaiters: Array<() => void> = [];
 
 /**
  * OpenAI-compatible LLM provider.
@@ -60,7 +65,9 @@ export class OpenAIProvider implements MemoryProvider {
     this.model = model;
     this.maxTokens = maxTokens;
     this.baseUrl = normalizeBaseUrl(baseURL || getEnvVar("OPENAI_BASE_URL"));
-    this.reasoningEffort = getEnvVar("OPENAI_REASONING_EFFORT") || undefined;
+    this.reasoningEffort = resolveReasoningEffort(
+      getEnvVar("OPENAI_REASONING_EFFORT"),
+    );
     this.timeoutMs = resolveTimeout();
     this.azureApiVersion =
       getEnvVar("OPENAI_API_VERSION") || DEFAULT_AZURE_API_VERSION;
@@ -104,14 +111,16 @@ export class OpenAIProvider implements MemoryProvider {
     // AGENTMEMORY_LLM_TIMEOUT_MS and finally the 60s default. See #446.
     let response: Response;
     try {
-      response = await fetchWithTimeout(
-        url,
-        {
-          method: "POST",
-          headers: buildAuthHeaders(this.apiKey, this.isAzure),
-          body: JSON.stringify(body),
-        },
-        this.timeoutMs,
+      response = await withOpenAiConcurrencyLimit(() =>
+        fetchWithTimeout(
+          url,
+          {
+            method: "POST",
+            headers: buildAuthHeaders(this.apiKey, this.isAzure),
+            body: JSON.stringify(body),
+          },
+          this.timeoutMs,
+        ),
       );
     } catch (err) {
       const aborted = err instanceof Error && err.name === "AbortError";
@@ -151,6 +160,37 @@ export class OpenAIProvider implements MemoryProvider {
   }
 }
 
+function resolveReasoningEffort(raw: string | undefined): string | undefined {
+  const value = raw?.trim().toLowerCase();
+  if (!value) return undefined;
+  if (VALID_REASONING_EFFORTS.has(value)) return value;
+  process.stderr.write(
+    `[agentmemory] Ignoring unsupported OPENAI_REASONING_EFFORT=${value}. ` +
+      `Expected one of: none, low, medium, high.\n`,
+  );
+  return undefined;
+}
+
+async function withOpenAiConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T> {
+  while (activeOpenAiCalls >= resolveLlmConcurrency()) {
+    await new Promise<void>((resolve) => openAiWaiters.push(resolve));
+  }
+  activeOpenAiCalls += 1;
+  try {
+    return await fn();
+  } finally {
+    activeOpenAiCalls -= 1;
+    openAiWaiters.shift()?.();
+  }
+}
+
+function resolveLlmConcurrency(): number {
+  return (
+    parsePositiveInt(getEnvVar("AGENTMEMORY_LLM_CONCURRENCY")) ??
+    DEFAULT_LLM_CONCURRENCY
+  );
+}
+
 // Resolves the outbound-fetch timeout for the OpenAI LLM path.
 // Precedence (preserving v0.9.17 behaviour):
 //   1. OPENAI_TIMEOUT_MS       — OpenAI-scoped alias (back-compat)
@@ -179,4 +219,3 @@ function parsePositiveInt(raw: string | null | undefined): number | undefined {
   const n = Number(trimmed);
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
-

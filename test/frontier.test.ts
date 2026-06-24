@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 vi.mock("../src/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -73,12 +73,23 @@ function makeAction(overrides: Partial<Action>): Action {
 describe("Frontier Functions", () => {
   let sdk: ReturnType<typeof mockSdk>;
   let kv: ReturnType<typeof mockKV>;
+  const originalLocale = process.env["AGENTMEMORY_LOCALE"];
+  const originalViewerLanguage = process.env["VIEWER_LANGUAGE"];
 
   beforeEach(() => {
+    process.env["AGENTMEMORY_LOCALE"] = "en";
+    process.env["VIEWER_LANGUAGE"] = "en";
     sdk = mockSdk();
     kv = mockKV();
     registerActionsFunction(sdk as never, kv as never);
     registerFrontierFunction(sdk as never, kv as never);
+  });
+
+  afterEach(() => {
+    if (originalLocale === undefined) delete process.env["AGENTMEMORY_LOCALE"];
+    else process.env["AGENTMEMORY_LOCALE"] = originalLocale;
+    if (originalViewerLanguage === undefined) delete process.env["VIEWER_LANGUAGE"];
+    else process.env["VIEWER_LANGUAGE"] = originalViewerLanguage;
   });
 
   describe("mem::frontier", () => {

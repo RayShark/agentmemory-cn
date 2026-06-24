@@ -1180,15 +1180,22 @@ To test with a Claude Code Pro/Max subscription instead of an API key, opt in ex
 
 ```env
 AGENTMEMORY_ALLOW_AGENT_SDK=true
-AGENTMEMORY_AUTO_COMPRESS=true
+AGENTMEMORY_AUTO_COMPRESS=false
 ```
+
+Do not enable `AGENTMEMORY_AUTO_COMPRESS=true` on an active hook path until
+you have measured the provider cost. When enabled, each captured observation
+can create an LLM compression job.
 
 Turn on graph or consolidation features in the same file if you want them:
 
 ```env
-GRAPH_EXTRACTION_ENABLED=true
-CONSOLIDATION_ENABLED=true
+GRAPH_EXTRACTION_ENABLED=false
+CONSOLIDATION_ENABLED=false
 ```
+
+Set those to `true` only for explicit background processing windows or after
+you have confirmed the LLM quota can absorb session-end and scheduled jobs.
 
 ### Language / Locale
 
@@ -1258,8 +1265,11 @@ Create `~/.agentmemory/.env`:
                                           # OpenAI-scoped OPENAI_TIMEOUT_MS alias (above)
                                           # takes precedence when set, for back-compat
                                           # with v0.9.17.
-                                          # Increase for slow networks or large batch calls;
-                                          # decrease to fail-fast on rate-limit holds.
+	                                          # Increase for slow networks or large batch calls;
+	                                          # decrease to fail-fast on rate-limit holds.
+# AGENTMEMORY_LLM_CONCURRENCY=1         # Max concurrent OpenAI-compatible LLM calls.
+                                         # Keep 1 for hook/background safety; raise only
+                                         # for measured batch jobs.
 
 # Search tuning
 # BM25_WEIGHT=0.4
@@ -1273,7 +1283,7 @@ Create `~/.agentmemory/.env`:
 # III_REST_PORT=3111
 
 # Features
-# AGENTMEMORY_AUTO_COMPRESS=false  # OFF by default (#138). When on,
+# AGENTMEMORY_AUTO_COMPRESS=false  # OFF by default (#138). When set to true,
                                    # every PostToolUse hook calls your
                                    # LLM provider to compress the
                                    # observation — expect significant
@@ -1309,8 +1319,8 @@ Create `~/.agentmemory/.env`:
                                    #   log only per Claude Code docs)
                                    # Observations are still captured via
                                    # PostToolUse regardless of this flag.
-# GRAPH_EXTRACTION_ENABLED=false
-# CONSOLIDATION_ENABLED=true
+# GRAPH_EXTRACTION_ENABLED=false   # OFF by default; true adds LLM graph extraction jobs.
+# CONSOLIDATION_ENABLED=false      # OFF by default; true adds session-end and scheduled LLM jobs.
 # LESSON_DECAY_ENABLED=true
 # OBSIDIAN_AUTO_EXPORT=false
 # AGENTMEMORY_EXPORT_ROOT=~/.agentmemory

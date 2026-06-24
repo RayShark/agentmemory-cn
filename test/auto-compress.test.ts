@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RawObservation } from "../src/types.js";
 
 vi.mock("../src/logger.js", () => ({
@@ -73,16 +76,28 @@ function validPayload(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("mem::observe auto-compress gate (#138)", () => {
+  let sandboxHome = "";
+  const originalHome = process.env["HOME"];
+  const originalUserProfile = process.env["USERPROFILE"];
+
   beforeEach(() => {
     // Reset module cache so observe.js re-imports config.js with the
     // fresh AGENTMEMORY_AUTO_COMPRESS env state. Without this, a later
     // test that sets the env var can be undermined by cached module
     // state from an earlier test (and vice versa).
     vi.resetModules();
+    sandboxHome = mkdtempSync(join(tmpdir(), "agentmemory-auto-compress-"));
+    process.env["HOME"] = sandboxHome;
+    process.env["USERPROFILE"] = sandboxHome;
     delete process.env["AGENTMEMORY_AUTO_COMPRESS"];
   });
   afterEach(() => {
     delete process.env["AGENTMEMORY_AUTO_COMPRESS"];
+    if (originalHome === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = originalHome;
+    if (originalUserProfile === undefined) delete process.env["USERPROFILE"];
+    else process.env["USERPROFILE"] = originalUserProfile;
+    rmSync(sandboxHome, { recursive: true, force: true });
   });
 
   it("default (AGENTMEMORY_AUTO_COMPRESS unset): does NOT fire mem::compress", async () => {

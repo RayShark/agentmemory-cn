@@ -208,7 +208,7 @@ describe("Provider hang regression — OpenRouterEmbeddingProvider", () => {
 describe("OpenAIProvider timeout env precedence (#446)", () => {
   beforeEach(() => {
     delete process.env["OPENAI_TIMEOUT_MS"];
-    delete process.env["AGENTMEMORY_LLM_TIMEOUT_MS"];
+    process.env["AGENTMEMORY_LLM_TIMEOUT_MS"] = "";
     vi.spyOn(globalThis, "fetch").mockImplementation(hangingFetch as typeof fetch);
   });
   afterEach(() => {
@@ -344,3 +344,117 @@ describe("OpenAIProvider thinking-model fallback (#627)", () => {
   });
 });
 
+describe("OpenAIProvider reasoning effort validation", () => {
+  beforeEach(() => {
+    delete process.env["OPENAI_TIMEOUT_MS"];
+    delete process.env["AGENTMEMORY_LLM_TIMEOUT_MS"];
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env["OPENAI_REASONING_EFFORT"];
+  });
+
+  it("does not send unsupported OPENAI_REASONING_EFFORT values", async () => {
+    process.env["OPENAI_REASONING_EFFORT"] = "xhigh";
+    let requestBody: Record<string, unknown> | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (async (_url: string | URL | Request, init?: RequestInit) => {
+        requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<
+          string,
+          unknown
+        >;
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    );
+
+    const provider = new OpenAIProvider("test-key", "gpt-4o-mini", 1024);
+    await expect(provider.compress("system", "user")).resolves.toBe("ok");
+
+    expect(requestBody).toBeDefined();
+    expect(requestBody).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("sends supported OPENAI_REASONING_EFFORT values", async () => {
+    process.env["OPENAI_REASONING_EFFORT"] = "high";
+    let requestBody: Record<string, unknown> | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (async (_url: string | URL | Request, init?: RequestInit) => {
+        requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<
+          string,
+          unknown
+        >;
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    );
+
+    const provider = new OpenAIProvider("test-key", "gpt-4o-mini", 1024);
+    await expect(provider.compress("system", "user")).resolves.toBe("ok");
+
+    expect(requestBody).toMatchObject({ reasoning_effort: "high" });
+  });
+});
+
+describe("OpenAIProvider LLM concurrency limit", () => {
+  beforeEach(() => {
+    delete process.env["OPENAI_TIMEOUT_MS"];
+    process.env["AGENTMEMORY_LLM_TIMEOUT_MS"] = "";
+    process.env["AGENTMEMORY_LLM_CONCURRENCY"] = "1";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env["OPENAI_TIMEOUT_MS"];
+    delete process.env["AGENTMEMORY_LLM_TIMEOUT_MS"];
+    delete process.env["AGENTMEMORY_LLM_CONCURRENCY"];
+  });
+
+  async function waitUntil(
+    predicate: () => boolean,
+    message: string,
+  ): Promise<void> {
+    for (let i = 0; i < 20; i++) {
+      if (predicate()) return;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error(message);
+  }
+
+  it("serializes OpenAI-compatible LLM calls when AGENTMEMORY_LLM_CONCURRENCY=1", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const releases: Array<() => void> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active -= 1;
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as typeof fetch,
+    );
+
+    const provider = new OpenAIProvider("test-key", "gpt-4o-mini", 1024);
+    const first = provider.compress("system", "first");
+    await waitUntil(() => releases.length === 1, "first request did not start");
+    const second = provider.compress("system", "second");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(releases).toHaveLength(1);
+    releases[0]();
+    await expect(first).resolves.toBe("ok");
+    await waitUntil(() => releases.length === 2, "second request did not start");
+    expect(maxActive).toBe(1);
+    releases[1]();
+    await expect(second).resolves.toBe("ok");
+  });
+});

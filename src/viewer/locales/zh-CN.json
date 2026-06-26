@@ -145,11 +145,11 @@
     "introBody": "是通过 memory_remember MCP 工具或 /agentmemory/remember 端点保存的持久事实、架构说明、约定和经验。它们会跨会话保留，并以 v1、v2 等版本互相取代。",
     "searchPlaceholder": "搜索记忆...",
     "emptyTitle": "还没有记忆",
-    "emptyLead": "记忆是 agentmemory 跨会话保留的提炼事实，包括文件路径、架构决策和用户偏好。hooks 会在编码会话中自动捕获，也可以手动保存。",
+    "emptyLead": "记忆是 agentmemory 跨会话保留的提炼事实，包括文件路径、架构决策和用户偏好。钩子会在编码会话中自动捕获，也可以手动保存。",
     "docsLink": "记忆类型 ->",
     "deleteTitle": "删除记忆",
     "deleteConfirm": "确定要删除“{{title}}”吗？此操作无法撤销。",
-    "deleteReason": "通过 Viewer 删除"
+    "deleteReason": "通过查看器删除"
   },
   "activity": {
     "loading": "正在加载动态...",
@@ -187,11 +187,11 @@
   "lessons": {
     "loading": "正在加载经验...",
     "introPrefix": "经验",
-    "introBody": "是从过往工作中提取出来的可迁移启发式规则：短小的命令式准则。它们可以从 JSONL 导入中自动出现，被 agent 应用时会强化，长期不用会衰减。置信度越高，说明越经得起实战验证。",
+    "introBody": "是从过往工作中提取出来的可迁移启发式规则：短小的命令式准则。它们可以从 JSONL 导入中自动出现，被代理应用时会强化，长期不用会衰减。置信度越高，说明越经得起实战验证。",
     "searchPlaceholder": "搜索经验...",
     "count": "{{count}} 条经验",
     "emptyTitle": "还没有经验",
-    "emptyLead": "经验是带置信度评分的模式观察：你纠正过一次、agent 之后不应该再犯的事情。它们会跨项目保留。",
+    "emptyLead": "经验是带置信度评分的模式观察：你纠正过一次、代理之后不应该再犯的事情。它们会跨项目保留。",
     "docsLink": "经验衰减与评分 ->",
     "lesson": "经验",
     "reinforcements": "强化次数"
@@ -201,7 +201,7 @@
     "searchPlaceholder": "搜索任务...",
     "count": "{{count}} 个任务",
     "emptyTitle": "还没有跟踪任务",
-    "emptyLead": "任务是 agent 在会话中提出的后续事项：需要回看的决策、需要检查的文件、被输入阻塞的工作。它们会以 pending -> active -> done/blocked 的状态显示在这里。",
+    "emptyLead": "任务是代理在会话中提出的后续事项：需要回看的决策、需要检查的文件、被输入阻塞的工作。它们会以 pending -> active -> done/blocked 的状态显示在这里。",
     "createWays": "三种创建方式：",
     "docsLink": "任务生命周期文档 ->"
   },
@@ -274,7 +274,7 @@
     "next": "下一条",
     "reset": "重置",
     "speed": "速度",
-    "empty": "选择一个会话回放，或从 ~/.claude/projects 导入 Claude Code JSONL transcript。",
+    "empty": "选择一个会话回放，或从 ~/.claude/projects 导入 Claude Code JSONL 转录记录。",
     "noEvent": "未选择事件。",
     "tool": "工具",
     "input": "输入",
@@ -291,7 +291,7 @@
     "firstRunKicker": "首次运行 -> 10 秒看到效果",
     "firstRunTitle": "写入示例数据并验证语义召回",
     "firstRunBody": "agentmemory 正在运行，但还没有捕获到任何会话。在另一个终端运行 demo 命令：它会写入 3 个真实感编码会话，并证明混合搜索能找出关键词搜索会漏掉的语义相关记忆。",
-    "firstRunLink": "或者：接入真实 agent ->",
+    "firstRunLink": "或者：接入真实代理 ->",
     "stats": {
       "sessions": "会话",
       "active": "{{count}} 个活跃",
@@ -326,7 +326,7 @@
       "memoryRelations": "记忆关系"
     },
     "empty": {
-      "sessions": "还没有会话。请启动一个已启用 agentmemory hooks 的编码会话。",
+      "sessions": "还没有会话。请启动一个已启用 agentmemory 钩子的编码会话。",
       "activity": "还没有记录动态",
       "semantic": "还没有语义事实。观察记录会随时间整合成语义记忆。",
       "procedural": "还没有流程。重复出现的模式会被提取成流程记忆。"

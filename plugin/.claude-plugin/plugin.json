@@ -1,7 +1,7 @@
 {
   "name": "agentmemory",
   "version": "0.9.22",
-  "description": "Persistent memory for AI coding agents -- captures tool usage, compresses via LLM, injects context into future sessions. 12 hooks, 53 MCP tools, 8 skills, real-time viewer. zh-CN skill assets are bundled; this default manifest points to English skills.",
+  "description": "面向 AI 编码代理的持久化记忆：捕获工具使用，通过 LLM 压缩，并向后续会话注入上下文。12 个钩子、53 个 MCP 工具、8 个中文技能、实时查看器。已捆绑 zh-CN 技能；这个默认清单仍指向英文技能。",
   "author": {
     "name": "Rohit Ghumare",
     "url": "https://github.com/rohitg00"

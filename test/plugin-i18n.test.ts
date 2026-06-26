@@ -38,7 +38,7 @@ describe("plugin i18n assets", () => {
     expect(readme).toContain("commands.zh-CN");
   });
 
-  it("keeps static Codex/Claude manifests pointed at English skills", () => {
+  it("keeps static Codex/Claude manifests pointed at bundled skills", () => {
     const codex = JSON.parse(
       readFileSync(join(pluginRoot, ".codex-plugin", "plugin.json"), "utf-8"),
     );
@@ -48,8 +48,10 @@ describe("plugin i18n assets", () => {
 
     expect(codex.skills).toBe("./skills/");
     expect(claude.skills).toEqual(["./skills/"]);
-    expect(codex.description).toContain("default manifest points to English skills");
-    expect(claude.description).toContain("default manifest points to English skills");
+    expect(codex.description).toContain("持久化记忆");
+    expect(claude.description).toContain("持久化记忆");
+    expect(codex.description).toContain("英文技能");
+    expect(claude.description).toContain("英文技能");
   });
 
   it("generates zh-CN Codex and Claude plugin manifests in locale staging", () => {
@@ -81,6 +83,10 @@ describe("plugin i18n assets", () => {
 
       expect(codexManifest.skills).toBe("./skills.zh-CN/");
       expect(claudeManifest.skills).toEqual(["./skills.zh-CN/"]);
+      expect(codexManifest.description).toContain("持久化记忆");
+      expect(claudeManifest.description).toContain("持久化记忆");
+      expect(codexManifest.description).not.toContain("Persistent memory");
+      expect(claudeManifest.description).not.toContain("Persistent memory");
       expect(codexManifest.mcpServers).toBe("./.mcp.json");
       expect(codexManifest.hooks).toBe("./hooks/hooks.codex.json");
       expect(existsSync(join(expectedRoot, "skills.zh-CN", "recap", "SKILL.md"))).toBe(
@@ -131,7 +137,11 @@ describe("plugin i18n assets", () => {
       const englishSkill = join(englishRoot, name, "SKILL.md");
       const chineseSkill = join(chineseRoot, name, "SKILL.md");
       expect(existsSync(chineseSkill), `missing zh-CN skill: ${name}`).toBe(true);
-      expect(frontmatter(chineseSkill)).toBe(frontmatter(englishSkill));
+      const zhFrontmatter = frontmatter(chineseSkill);
+      expect(zhFrontmatter).toContain(`name: ${name}`);
+      expect(zhFrontmatter).toContain("user-invocable: true");
+      expect(zhFrontmatter).toContain("description:");
+      expect(zhFrontmatter).not.toBe(frontmatter(englishSkill));
     }
   });
 
@@ -141,6 +151,18 @@ describe("plugin i18n assets", () => {
 
     expect(existsSync(chineseRoot)).toBe(true);
     expect(fileNames(chineseRoot)).toEqual(fileNames(englishRoot));
+  });
+
+  it("localizes zh-CN OpenCode command headings", () => {
+    const chineseRoot = join(pluginRoot, "opencode", "commands.zh-CN");
+
+    for (const file of fileNames(chineseRoot)) {
+      const content = readFileSync(join(chineseRoot, file), "utf-8");
+      expect(content, file).toContain("## 用法");
+      expect(content, file).toContain("## 执行说明");
+      expect(content, file).not.toContain("## Usage");
+      expect(content, file).not.toContain("## Instructions");
+    }
   });
 
   it("zh-CN recap skill asks for a Chinese final total", () => {

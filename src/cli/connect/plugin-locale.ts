@@ -25,6 +25,12 @@ const MANIFEST_DIRS: Record<PluginManifestTarget, string> = {
 };
 
 const ZH_CN_SKILLS_PATH = "./skills.zh-CN/";
+const ZH_CN_PLUGIN_DESCRIPTIONS: Record<PluginManifestTarget, string> = {
+  claude:
+    "面向 AI 编码代理的持久化记忆：捕获工具使用，通过 LLM 压缩，并向后续会话注入上下文。12 个钩子、53 个 MCP 工具、8 个中文技能、实时查看器。",
+  codex:
+    "面向 AI 编码代理的持久化记忆：捕获工具使用，通过 LLM 压缩，并向后续会话注入上下文。6 个钩子、53 个 MCP 工具、8 个中文技能、实时查看器。",
+};
 
 export function resolvePluginManifestForLocale(
   target: PluginManifestTarget,
@@ -85,6 +91,7 @@ function writeLocaleManifest(
   ) as Record<string, unknown>;
 
   source["skills"] = target === "codex" ? ZH_CN_SKILLS_PATH : [ZH_CN_SKILLS_PATH];
+  source["description"] = ZH_CN_PLUGIN_DESCRIPTIONS[target];
   writeJsonAtomic(manifestPath(pluginRoot, target), source);
 }
 

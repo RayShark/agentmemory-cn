@@ -1,4 +1,9 @@
 <p align="center">
+  <strong>为习惯中文 vibe coding 的用户而来：</strong>
+  让你更自然地使用 agentmemory，让 AI 编程助手持续记住项目上下文。
+</p>
+
+<p align="center">
   <img src="assets/banner.png" alt="agentmemory — Persistent memory for AI coding agents" width="720" />
 </p>
 

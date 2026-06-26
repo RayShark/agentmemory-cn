@@ -71,8 +71,8 @@ describe("locale-aware LLM prompts", () => {
     );
 
     expect(prompt).toContain("时间戳: 2026-05-28T10:00:00.000Z");
-    expect(prompt).toContain("Hook: prompt_submit");
-    expect(prompt).toContain("Tool: Read");
+    expect(prompt).toContain("钩子: prompt_submit");
+    expect(prompt).toContain("工具: Read");
     expect(prompt).toContain("输入:");
     expect(prompt).toContain("输出:");
     expect(prompt).toContain("用户提示:");

@@ -1,7 +1,7 @@
 {
   "name": "@agentmemory/mcp",
   "version": "0.9.22",
-  "description": "Standalone MCP server for agentmemory — thin shim that re-exposes @agentmemory/agentmemory's MCP entrypoint",
+  "description": "agentmemory 的独立 MCP 服务器，轻量封装 @agentmemory/agentmemory 的 MCP 入口",
   "type": "module",
   "bin": {
     "agentmemory-mcp": "./bin.mjs"

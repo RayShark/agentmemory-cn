@@ -196,7 +196,7 @@ export type DoctorEffects = {
   pidfileExists: () => boolean;
   /** Resolve the iii binary on PATH; return null if not found. */
   findIiiBinary: () => string | null;
-  /** Path to ~/.local/bin/iii (the location we install to). */
+  /** Path to ~/.agentmemory/bin/iii (the private install location). */
   localBinIiiPath: () => string;
   /** Run `iii --version`; null if it fails. */
   iiiBinaryVersion: (binPath: string) => string | null;

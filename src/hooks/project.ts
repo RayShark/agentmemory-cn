@@ -12,8 +12,22 @@ export function resolveProject(cwd: unknown): string {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 500,
     }).toString().trim();
-    if (top) return basename(top);
+    if (top) return gitCommonDirBasename(dir) ?? basename(top);
   } catch {}
 
   return basename(dir);
+}
+
+function gitCommonDirBasename(cwd: string): string | null {
+  try {
+    const commonDir = execSync("git rev-parse --git-common-dir", {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 500,
+    }).toString().trim();
+    if (!commonDir) return null;
+    return basename(commonDir.replace(/\/\.git$/, ""));
+  } catch {
+    return null;
+  }
 }

@@ -130,6 +130,7 @@ function mergeConfig(existing: OpencodeConfig | null): OpencodeConfig {
 export const adapter: ConnectAdapter = {
   name: "opencode",
   displayName: "OpenCode",
+  category: "mcp",
   docs: "https://github.com/rohitg00/agentmemory/tree/main/plugin/opencode",
   protocolNote:
     "→ Using OpenCode's top-level mcp config plus the bundled agentmemory plugin and slash commands.",

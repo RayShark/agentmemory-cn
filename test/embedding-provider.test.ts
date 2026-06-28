@@ -21,8 +21,11 @@ const PROVIDER_ENV_KEYS = [
   "OPENROUTER_API_KEY",
   "EMBEDDING_PROVIDER",
   "OPENAI_BASE_URL",
+  "OPENAI_EMBEDDING_BASE_URL",
+  "OPENAI_EMBEDDING_API_KEY",
   "OPENAI_EMBEDDING_MODEL",
   "OPENAI_EMBEDDING_DIMENSIONS",
+  "OPENAI_API_VERSION",
   "AGENTMEMORY_TRANSFORMERS_REMOTE_HOST",
   "TRANSFORMERS_REMOTE_HOST",
   "HF_ENDPOINT",
@@ -146,7 +149,10 @@ describe("OpenAIEmbeddingProvider", () => {
 
   it("throws when no API key is provided", () => {
     process.env["OPENAI_API_KEY"] = "";
-    expect(() => new OpenAIEmbeddingProvider()).toThrow("OPENAI_API_KEY is required");
+    process.env["OPENAI_EMBEDDING_API_KEY"] = "";
+    expect(() => new OpenAIEmbeddingProvider()).toThrow(
+      /API key is required.*OPENAI_EMBEDDING_API_KEY.*OPENAI_API_KEY/,
+    );
   });
 
   it("respects OPENAI_BASE_URL env var", async () => {

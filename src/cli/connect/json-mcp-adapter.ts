@@ -20,13 +20,20 @@ export type JsonMcpAdapterConfig = {
   configPath: string;
   docs?: string;
   protocolNote?: string;
+  // Integration style for onboarding grouping. Defaults to "mcp" since a
+  // JSON MCP config writer is MCP-only by construction; hosts that also
+  // ship hooks (e.g. OpenClaw) pass "native".
+  category?: "native" | "mcp";
+  // Wrapper key under which servers live. Default "mcpServers".
+  // Zed uses "context_servers"; otherwise same shape.
+  wrapperKey?: string;
+  // Extra fields merged into the agentmemory entry. Droid requires
+  // type: "stdio"; other hosts ignore unknown fields.
+  extraEntryFields?: Record<string, unknown>;
 };
 
 type McpEntry = typeof AGENTMEMORY_MCP_BLOCK;
-type McpConfig = {
-  mcpServers?: Record<string, McpEntry>;
-  [key: string]: unknown;
-};
+type McpConfig = Record<string, unknown>;
 
 function entryMatches(entry: unknown): boolean {
   if (!entry || typeof entry !== "object") return false;
@@ -39,9 +46,11 @@ function entryMatches(entry: unknown): boolean {
 export function createJsonMcpAdapter(
   config: JsonMcpAdapterConfig,
 ): ConnectAdapter {
+  const wrapperKey = config.wrapperKey ?? "mcpServers";
   return {
     name: config.name,
     displayName: config.displayName,
+    category: config.category ?? "mcp",
     ...(config.docs !== undefined && { docs: config.docs }),
     ...(config.protocolNote !== undefined && {
       protocolNote: config.protocolNote,
@@ -56,7 +65,7 @@ export function createJsonMcpAdapter(
       const existing = readJsonSafe<McpConfig>(config.configPath);
       const next: McpConfig = existing ? { ...existing } : {};
       const servers: Record<string, McpEntry> = {
-        ...((next.mcpServers as Record<string, McpEntry>) ?? {}),
+        ...((next[wrapperKey] as Record<string, McpEntry>) ?? {}),
       };
 
       const alreadyHas = entryMatches(servers["agentmemory"]);
@@ -71,7 +80,7 @@ export function createJsonMcpAdapter(
             locale,
             alreadyHas
               ? "connect.jsonMcp.dryRunOverwrite"
-              : "connect.jsonMcp.dryRunAdd",
+            : "connect.jsonMcp.dryRunAdd",
             { path: config.configPath },
           ),
         );
@@ -86,12 +95,18 @@ export function createJsonMcpAdapter(
         mkdirSync(dirname(config.configPath), { recursive: true });
       }
 
-      servers["agentmemory"] = AGENTMEMORY_MCP_BLOCK;
-      next.mcpServers = servers;
+      servers["agentmemory"] = {
+        ...AGENTMEMORY_MCP_BLOCK,
+        ...(config.extraEntryFields ?? {}),
+      };
+      next[wrapperKey] = servers;
       writeJsonAtomic(config.configPath, next);
 
       const verify = readJsonSafe<McpConfig>(config.configPath);
-      if (!entryMatches(verify?.mcpServers?.["agentmemory"])) {
+      const verifyServers = verify?.[wrapperKey] as
+        | Record<string, McpEntry>
+        | undefined;
+      if (!entryMatches(verifyServers?.["agentmemory"])) {
         p.log.error(
           cliTFor(locale, "connect.jsonMcp.verificationFailed", {
             path: config.configPath,

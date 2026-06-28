@@ -26,39 +26,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
 import { writePrefs } from "./preferences.js";
-import { resolveAdapter, runAdapter } from "./connect/index.js";
-import type { ConnectResult } from "./connect/types.js";
+import * as connect from "./connect/index.js";
+import type { ConnectAdapter, ConnectResult } from "./connect/types.js";
 import { currentCliLocale, cliTFor } from "./i18n.js";
 import type { Locale } from "../i18n/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Native plugin row — these agents ship an agentmemory plugin or
-// first-party integration. Glyphs match SkillKit's published set
-// where they overlap; the rest fall back to the generic `◇`.
-const NATIVE_AGENTS: { value: string; label: string; glyph: string }[] = [
-  { value: "claude-code", label: "Claude Code", glyph: "⟁" },
-  { value: "codex", label: "Codex", glyph: "◎" },
-  { value: "openhuman", label: "OpenHuman", glyph: "◇" },
-  { value: "openclaw", label: "OpenClaw", glyph: "◇" },
-  { value: "hermes", label: "Hermes", glyph: "◇" },
-  { value: "pi", label: "Pi", glyph: "◇" },
-  { value: "cursor", label: "Cursor", glyph: "◫" },
-  { value: "gemini-cli", label: "Gemini CLI", glyph: "✦" },
-];
-
-// MCP-only row — these agents use the MCP server we ship rather than
-// a native plugin.
-const MCP_AGENTS: { value: string; label: string; glyph: string }[] = [
-  { value: "opencode", label: "OpenCode", glyph: "⬡" },
-  { value: "cline", label: "Cline", glyph: "◇" },
-  { value: "goose", label: "Goose", glyph: "◇" },
-  { value: "kilo", label: "Kilo", glyph: "◇" },
-  { value: "aider", label: "Aider", glyph: "◇" },
-  { value: "claude-desktop", label: "Claude Desktop", glyph: "⟁" },
-  { value: "windsurf", label: "Windsurf", glyph: "◇" },
-  { value: "roo", label: "Roo", glyph: "◇" },
-];
+const AGENT_GLYPH: Record<string, string> = {
+  "claude-code": "⟁",
+  "copilot-cli": "◈",
+  codex: "◎",
+  cursor: "◫",
+  "gemini-cli": "✦",
+  opencode: "⬡",
+};
 
 const PROVIDERS: { value: string; labelKey: string; envKey: string | null }[] = [
   { value: "anthropic", labelKey: "providerAnthropic", envKey: "ANTHROPIC_API_KEY" },
@@ -69,6 +51,15 @@ const PROVIDERS: { value: string; labelKey: string; envKey: string | null }[] = 
   { value: "skip", labelKey: "providerSkip", envKey: null },
 ];
 
+function connectAdapters(): readonly ConnectAdapter[] {
+  try {
+    const adapters = (connect as { ADAPTERS?: readonly ConnectAdapter[] }).ADAPTERS;
+    return Array.isArray(adapters) ? adapters : [];
+  } catch {
+    return [];
+  }
+}
+
 function onboardingT(
   locale: Locale,
   key: string,
@@ -77,19 +68,31 @@ function onboardingT(
   return cliTFor(locale, `onboarding.${key}`, params);
 }
 
-function buildAgentOptions(locale: Locale): { value: string; label: string; hint?: string }[] {
+export function buildAgentOptions(
+  locale: Locale = currentCliLocale(),
+): { value: string; label: string; hint?: string }[] {
+  const options = connectAdapters().map((a) => ({
+    value: a.name,
+    label: `${AGENT_GLYPH[a.name] ?? "◇"} ${a.displayName}`,
+    hint:
+      a.category === "native"
+        ? onboardingT(locale, "nativePluginHint")
+        : onboardingT(locale, "mcpServerHint"),
+    category: a.category ?? "mcp",
+  }));
   return [
-    ...NATIVE_AGENTS.map((a) => ({
-      value: a.value,
-      label: `${a.glyph} ${a.label}`,
-      hint: onboardingT(locale, "nativePluginHint"),
-    })),
-    ...MCP_AGENTS.map((a) => ({
-      value: a.value,
-      label: `${a.glyph} ${a.label}`,
-      hint: onboardingT(locale, "mcpServerHint"),
-    })),
-  ];
+    ...options.filter((o) => o.category === "native"),
+    ...options.filter((o) => o.category === "mcp"),
+  ].map(({ value, label, hint }) => ({ value, label, hint }));
+}
+
+export function getInitialAgentValues(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  if (env["COPILOT_CLI"] === "1" || env["COPILOT_AGENT_SESSION_ID"]) {
+    return ["copilot-cli"];
+  }
+  return ["claude-code"];
 }
 
 function buildProviderOptions(locale: Locale): { value: string; label: string }[] {
@@ -131,9 +134,6 @@ async function seedEnvFile(provider: string | null): Promise<string | null> {
       }
     }
   } else if (!template && !existsSync(target)) {
-    // Fall back to a minimal skeleton so users always get a `.env` to
-    // edit. This matches the shape of the bundled `.env.example`
-    // without forcing us to keep two copies in sync.
     const lines = [
       "# agentmemory environment — uncomment what you need",
       "# AGENTMEMORY_URL=http://localhost:3111",
@@ -187,7 +187,7 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     message: onboardingT(locale, "agentsQuestion"),
     options: buildAgentOptions(locale),
     required: false,
-    initialValues: ["claude-code"],
+    initialValues: getInitialAgentValues(),
   });
   if (p.isCancel(agentsPicked)) {
     p.cancel(onboardingT(locale, "cancelled"));
@@ -264,7 +264,7 @@ async function wireSelectedAgents(agents: string[], locale: Locale): Promise<voi
   const failed: { name: string; reason: string }[] = [];
 
   for (const name of agents) {
-    const adapter = resolveAdapter(name);
+    const adapter = connect.resolveAdapter(name);
     if (!adapter) {
       const reason = onboardingT(locale, "noAdapterReason");
       failed.push({ name, reason });
@@ -274,7 +274,7 @@ async function wireSelectedAgents(agents: string[], locale: Locale): Promise<voi
     p.log.step(cliTFor(locale, "connect.wiring", { agent: name }));
     let result: ConnectResult;
     try {
-      result = await runAdapter(adapter, { dryRun: false, force: false, locale });
+      result = await connect.runAdapter(adapter, { dryRun: false, force: false, locale });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       failed.push({ name, reason });

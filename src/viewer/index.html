@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>agentmemory viewer</title>
+  <title>agentmemory</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <!-- Removed Google Fonts <link> in #323: the viewer CSP is strict
        (default-src 'none', style-src 'unsafe-inline', font-src 'self')
@@ -717,6 +717,46 @@
     .flag-close:hover,
     .flag-close:focus-visible { color: var(--ink); outline: 2px solid var(--border); outline-offset: 1px; }
 
+    .viewer-auth {
+      display: none;
+      padding: 0 24px 10px 24px;
+      background: var(--bg);
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+    .viewer-auth.open { display: block; }
+    .viewer-auth-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(180px, 320px) auto;
+      gap: 10px;
+      align-items: center;
+      width: min(960px, 100%);
+      max-width: 960px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      background: var(--bg-subtle);
+      font-family: var(--font-ui);
+      font-size: 12px;
+    }
+    .viewer-auth-title { font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+    .viewer-auth-desc { color: var(--ink-muted); line-height: 1.4; }
+    .viewer-auth-desc code { font-family: var(--font-mono); font-size: 10px; color: var(--ink); }
+    .viewer-auth input {
+      width: 100%;
+      min-width: 0;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    @media (max-width: 900px) {
+      .viewer-auth-panel { grid-template-columns: 1fr; }
+    }
+
     /* Viewer footer */
     .viewer-footer {
       margin-top: 48px; padding: 16px 0 24px;
@@ -967,6 +1007,7 @@
   </div>
 
   <div id="flag-banners" class="flag-banners"></div>
+  <div id="viewer-auth" class="viewer-auth"></div>
 
   <div id="view-dashboard" class="view active"></div>
   <div id="view-graph" class="view"></div>
@@ -986,7 +1027,7 @@
   </div>
 
   <footer id="viewer-footer" class="viewer-footer">
-    <span>agentmemory viewer · <span id="footer-version" data-i18n="footer.versionLoading">loading...</span></span>
+    <span><span data-i18n="footer.viewer">agentmemory viewer</span> · <span id="footer-version" data-i18n="footer.versionLoading">loading...</span></span>
     <span class="footer-sep">·</span>
     <a href="https://github.com/rohitg00/agentmemory" target="_blank" rel="noopener" data-i18n="footer.github">github</a>
     <span class="footer-sep">·</span>
@@ -1024,6 +1065,56 @@
     }
 
     var LOCALE_BUNDLE = window.__AM_LOCALE__ || { locale: 'en', messages: { en: {}, current: {} } };
+    var INLINE_LOCALE_MESSAGES = {
+      en: {
+        meta: {
+          title: 'agentmemory viewer'
+        },
+        footer: {
+          viewer: 'agentmemory viewer'
+        },
+        graph: {
+          queryFailed: 'Graph query failed',
+          queryFailedDetail: 'graph/query failed (check server logs for HTTP error)',
+          retry: 'Retry',
+          truncated: 'Showing {{shown}} of {{total}} nodes (most-connected first). The full graph is too large to render at once.'
+        },
+        sessions: {
+          labels: {
+            id: 'id',
+            cwd: 'cwd',
+            started: 'started',
+            ended: 'ended',
+            model: 'model',
+            tags: 'tags'
+          }
+        }
+      },
+      'zh-CN': {
+        meta: {
+          title: 'agentmemory 查看器'
+        },
+        footer: {
+          viewer: 'agentmemory 查看器'
+        },
+        graph: {
+          queryFailed: '图谱查询失败',
+          queryFailedDetail: 'graph/query 失败（请查看服务端日志中的 HTTP 错误）',
+          retry: '重试',
+          truncated: '正在显示 {{shown}} / {{total}} 个节点（按连接数优先）。完整图谱过大，无法一次渲染。'
+        },
+        sessions: {
+          labels: {
+            id: 'ID',
+            cwd: '工作目录',
+            started: '开始时间',
+            ended: '结束时间',
+            model: '模型',
+            tags: '标签'
+          }
+        }
+      }
+    };
     var SAFE_I18N_ATTRS = {
       placeholder: true,
       title: true,
@@ -1055,7 +1146,9 @@
     function tRaw(key, vars) {
       var current = LOCALE_BUNDLE.messages && LOCALE_BUNDLE.messages.current;
       var en = LOCALE_BUNDLE.messages && LOCALE_BUNDLE.messages.en;
-      var template = localeLookup(current || {}, key) || localeLookup(en || {}, key) || key;
+      var inlineCurrent = INLINE_LOCALE_MESSAGES[LOCALE_BUNDLE.locale] || {};
+      var inlineEn = INLINE_LOCALE_MESSAGES.en || {};
+      var template = localeLookup(current || {}, key) || localeLookup(en || {}, key) || localeLookup(inlineCurrent, key) || localeLookup(inlineEn, key) || key;
       return interpolate(template, vars);
     }
 
@@ -1079,6 +1172,12 @@
       });
     }
 
+    function applyDocumentLocale() {
+      var locale = LOCALE_BUNDLE.locale || 'en';
+      document.documentElement.lang = locale;
+      document.title = tRaw('meta.title');
+    }
+
     var dateEl = document.getElementById('dateline');
     if (dateEl) dateEl.textContent = new Date().toLocaleDateString(LOCALE_BUNDLE.locale || 'en', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
 
@@ -1096,6 +1195,7 @@
     } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       applyTheme(true, false);
     }
+    applyDocumentLocale();
     applyI18n();
 
     var NODE_COLORS = {
@@ -1127,11 +1227,12 @@
     };
     var CB_STATE_COLORS = { closed: 'badge-green', open: 'badge-red', 'half-open': 'badge-yellow' };
     var TAB_IDS = ['dashboard', 'graph', 'memories', 'timeline', 'sessions', 'lessons', 'actions', 'crystals', 'audit', 'activity', 'profile', 'replay'];
+    var VIEWER_TOKEN_STORAGE_KEY = 'agentmemory-viewer-token';
 
     var state = {
       activeTab: 'dashboard',
       dashboard: { loaded: false, health: null, sessions: [], memories: [], graphStats: null, recentAudit: [], lessons: [], crystals: [] },
-      graph: { loaded: false, nodes: [], edges: [], stats: null, filters: {}, selectedNode: null },
+      graph: { loaded: false, nodes: [], edges: [], stats: null, filters: {}, selectedNode: null, queryError: null, truncated: false, totalNodes: 0, totalEdges: 0 },
       memories: { loaded: false, items: [], search: '', typeFilter: '' },
       timeline: { loaded: false, observations: [], sessionId: '', minImportance: 0, page: 0, pageSize: 50, sortOrder: 'desc' },
       sessions: { loaded: false, items: [], selectedId: null },
@@ -1244,17 +1345,54 @@
         try { el.setSelectionRange(focus.start, focus.end); } catch (e) {}
       }
     }
+    function getViewerToken() {
+      try { return sessionStorage.getItem(VIEWER_TOKEN_STORAGE_KEY) || ''; } catch (_) { return ''; }
+    }
+    function setViewerToken(token) {
+      try {
+        if (token) sessionStorage.setItem(VIEWER_TOKEN_STORAGE_KEY, token);
+        else sessionStorage.removeItem(VIEWER_TOKEN_STORAGE_KEY);
+      } catch (_) {}
+    }
+    function showViewerAuthPrompt() {
+      var host = document.getElementById('viewer-auth');
+      if (!host) return;
+      host.classList.add('open');
+      host.innerHTML =
+        '<div class="viewer-auth-panel">' +
+          '<div>' +
+            '<div class="viewer-auth-title">Viewer authorization required</div>' +
+            '<div id="viewer-auth-desc" class="viewer-auth-desc">Enter <code>AGENTMEMORY_SECRET</code> to unlock viewer API access.</div>' +
+          '</div>' +
+          '<input id="viewer-auth-token" type="password" autocomplete="off" spellcheck="false" aria-label="AGENTMEMORY_SECRET" aria-describedby="viewer-auth-desc" placeholder="AGENTMEMORY_SECRET" />' +
+          '<button class="btn" data-action="save-viewer-token">Unlock</button>' +
+        '</div>';
+      var input = document.getElementById('viewer-auth-token');
+      if (input && typeof input.focus === 'function') input.focus();
+    }
+    function hideViewerAuthPrompt() {
+      var host = document.getElementById('viewer-auth');
+      if (!host) return;
+      host.classList.remove('open');
+      host.innerHTML = '';
+    }
 
     async function api(path, opts) {
       try {
         var url = REST + '/agentmemory/' + path;
         var headers = Object.assign({ 'Cache-Control': 'no-cache' }, (opts && opts.headers) || {});
+        var viewerToken = getViewerToken();
+        if (viewerToken && !headers.Authorization && !headers.authorization) {
+          headers.Authorization = 'Bearer ' + viewerToken;
+        }
         var fetchOpts = Object.assign({}, opts || {}, { headers: headers });
         var res = await fetch(url, fetchOpts);
         if (!res.ok) {
+          if (res.status === 401) showViewerAuthPrompt();
           console.warn('[viewer] API ' + (fetchOpts.method || 'GET') + ' ' + path + ' returned ' + res.status);
           return null;
         }
+        hideViewerAuthPrompt();
         return await res.json();
       } catch (err) {
         console.warn('[viewer] API error on ' + path + ':', err);
@@ -1671,31 +1809,61 @@
       }
     }
 
+    // #753: previously POST'd `{}` and let the engine return the full
+    // graph. On 10k+ nodes the payload exceeded the iii state channel
+    // limit and the engine returned HTTP 500, leaving the tab blank
+    // with no signal. Now we pass an explicit `limit`, distinguish
+    // server error from empty-corpus, and render an actionable banner
+    // when the request itself fails instead of falling silent.
+    var GRAPH_INITIAL_LIMIT = 500;
+
     async function loadGraph() {
       var el = document.getElementById('view-graph');
       el.innerHTML = '<div class="graph-container"><div class="graph-canvas-wrap"><canvas id="graph-canvas"></canvas><div class="graph-controls"><button title="' + t('graph.zoomIn') + '" data-action="zoom-graph" data-dir="1">+</button><button title="' + t('graph.zoomOut') + '" data-action="zoom-graph" data-dir="-1">&minus;</button><div class="ctrl-divider"></div><button title="' + t('graph.recenter') + '" data-action="recenter-graph">⌖</button></div><div class="graph-tooltip" id="graph-tooltip"></div></div><div class="graph-sidebar" id="graph-sidebar"></div></div>';
 
       var results = await Promise.all([
-        apiPost('graph/query', {}),
+        apiPost('graph/query', { limit: GRAPH_INITIAL_LIMIT }),
         apiGet('graph/stats')
       ]);
-      var queryResult = results[0] || { nodes: [], edges: [] };
+      var queryResult = results[0];
+      if (queryResult === null) {
+        // api() returns null only on non-2xx or a transport error; an
+        // empty graph would come back as { nodes: [], edges: [] }.
+        // Surface as an error state so #753-class failures don't read
+        // as empty data — and so the rebuild action stays available.
+        state.graph.queryError = tRaw('graph.queryFailedDetail');
+        state.graph.nodes = [];
+        state.graph.edges = [];
+        state.graph.stats = results[1] || {};
+        state.graph.loaded = true;
+        renderGraphSidebar();
+        return;
+      }
+      state.graph.queryError = null;
       state.graph.nodes = queryResult.nodes || [];
       state.graph.edges = queryResult.edges || [];
+      state.graph.truncated = queryResult.truncated === true;
+      state.graph.totalNodes = typeof queryResult.totalNodes === 'number' ? queryResult.totalNodes : state.graph.nodes.length;
+      state.graph.totalEdges = typeof queryResult.totalEdges === 'number' ? queryResult.totalEdges : state.graph.edges.length;
       state.graph.stats = results[1] || {};
 
-      if (state.graph.nodes.length === 0) {
+      if (state.graph.nodes.length === 0 && (state.graph.stats.totalNodes || state.graph.stats.nodes || 0) === 0) {
         var sb = document.getElementById('graph-sidebar');
         if (sb) sb.innerHTML = '<h3>' + t('graph.title') + '</h3><p style="font-size:12px;color:var(--ink-faint);margin:8px 0;font-style:italic;">' + t('graph.loadingEmpty') + '</p>';
         var buildResult = await apiPost('graph/build', {});
         if (buildResult && buildResult.success && buildResult.nodes > 0) {
           var freshResults = await Promise.all([
-            apiPost('graph/query', {}),
+            apiPost('graph/query', { limit: GRAPH_INITIAL_LIMIT }),
             apiGet('graph/stats')
           ]);
-          var freshQuery = freshResults[0] || { nodes: [], edges: [] };
-          state.graph.nodes = freshQuery.nodes || [];
-          state.graph.edges = freshQuery.edges || [];
+          var freshQuery = freshResults[0];
+          if (freshQuery) {
+            state.graph.nodes = freshQuery.nodes || [];
+            state.graph.edges = freshQuery.edges || [];
+            state.graph.truncated = freshQuery.truncated === true;
+            state.graph.totalNodes = typeof freshQuery.totalNodes === 'number' ? freshQuery.totalNodes : state.graph.nodes.length;
+            state.graph.totalEdges = typeof freshQuery.totalEdges === 'number' ? freshQuery.totalEdges : state.graph.edges.length;
+          }
           state.graph.stats = freshResults[1] || {};
         }
       }
@@ -1722,7 +1890,26 @@
       var nodeCount = gs.totalNodes !== undefined ? gs.totalNodes : (gs.nodes !== undefined ? gs.nodes : (gs.nodeCount || state.graph.nodes.length));
       var edgeCount = gs.totalEdges !== undefined ? gs.totalEdges : (gs.edges !== undefined ? gs.edges : (gs.edgeCount || state.graph.edges.length));
 
-      var html = '<input type="text" class="graph-search" id="graph-search" placeholder="' + t('graph.searchPlaceholder') + '">';
+      var html = '';
+
+      // #753: error banner stays above the search box so a failed
+      // graph/query doesn't read as "0 nodes".
+      if (state.graph.queryError) {
+        html += '<div style="margin:8px 0;padding:10px 12px;border:1px solid var(--accent);background:var(--bg-alt);font-size:12px;color:var(--ink);line-height:1.4;">';
+        html += '<div style="font-weight:600;margin-bottom:4px;">' + t('graph.queryFailed') + '</div>';
+        html += '<div style="font-size:11px;color:var(--ink-muted);">' + esc(state.graph.queryError) + '</div>';
+        html += '<button class="btn" data-action="rebuild-graph" style="margin-top:8px;font-size:11px;">' + t('graph.retry') + '</button>';
+        html += '</div>';
+      } else if (state.graph.truncated) {
+        // #753: surface the cap so operators know they're not seeing
+        // the whole graph. Densest-first ranking on the server makes
+        // this the meaningful subset, not an arbitrary head.
+        html += '<div style="margin:8px 0;padding:10px 12px;border:1px solid var(--border);background:var(--bg-alt);font-size:11px;color:var(--ink-muted);line-height:1.4;">';
+        html += t('graph.truncated', { shown: state.graph.nodes.length, total: state.graph.totalNodes });
+        html += '</div>';
+      }
+
+      html += '<input type="text" class="graph-search" id="graph-search" placeholder="' + t('graph.searchPlaceholder') + '">';
 
       html += '<h3 style="margin-top:16px;font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--ink-muted);font-family:var(--font-ui);font-weight:700;">' + t('graph.stats') + '</h3>';
       html += '<div style="display:flex;gap:20px;margin:10px 0 16px;padding:12px;background:var(--bg-alt);border:1px solid var(--border-light);border-radius:4px;">';
@@ -2347,8 +2534,15 @@
       // corpora. Older endpoints returned the full unbounded list which
       // hit the iii invocation timeout and the UI fell through to 0.
       var result = await apiGet('memories?latest=true&limit=2000');
-      state.memories.items = (result && result.memories) || [];
-      state.memories.total = (result && typeof result.total === 'number') ? result.total : state.memories.items.length;
+      var items = (result && result.memories) || [];
+      // Newest first — server returns KV-insertion order.
+      items.sort(function(a, b) {
+        var ac = (a && a.createdAt) || (a && a.updatedAt) || '';
+        var bc = (b && b.createdAt) || (b && b.updatedAt) || '';
+        return bc.localeCompare(ac);
+      });
+      state.memories.items = items;
+      state.memories.total = (result && typeof result.total === 'number') ? result.total : items.length;
       state.memories.loaded = true;
       renderMemories();
     }
@@ -3006,12 +3200,12 @@
       html += '<div class="card" style="margin-bottom:12px;"><div class="card-title">' + t('sessions.metadata') + '</div>';
       html += '<div style="font-size:12px;font-family:var(--font-mono);margin-top:8px;line-height:1.7;">';
       var detailId = sessionId(s);
-      html += '<div><span style="color:var(--ink-muted);">id:</span> ' + esc(detailId || tRaw('common.missingId')) + '</div>';
-      html += '<div><span style="color:var(--ink-muted);">cwd:</span> ' + esc(s.cwd || '-') + '</div>';
-      html += '<div><span style="color:var(--ink-muted);">started:</span> ' + esc(formatTime(s.startedAt)) + '</div>';
-      if (s.endedAt) html += '<div><span style="color:var(--ink-muted);">ended:</span> ' + esc(formatTime(s.endedAt)) + '</div>';
-      if (s.model) html += '<div><span style="color:var(--ink-muted);">model:</span> ' + esc(s.model) + '</div>';
-      if (s.tags && s.tags.length) html += '<div><span style="color:var(--ink-muted);">tags:</span> ' + s.tags.map(esc).join(', ') + '</div>';
+      html += '<div><span style="color:var(--ink-muted);">' + t('sessions.labels.id') + ':</span> ' + esc(detailId || tRaw('common.missingId')) + '</div>';
+      html += '<div><span style="color:var(--ink-muted);">' + t('sessions.labels.cwd') + ':</span> ' + esc(s.cwd || '-') + '</div>';
+      html += '<div><span style="color:var(--ink-muted);">' + t('sessions.labels.started') + ':</span> ' + esc(formatTime(s.startedAt)) + '</div>';
+      if (s.endedAt) html += '<div><span style="color:var(--ink-muted);">' + t('sessions.labels.ended') + ':</span> ' + esc(formatTime(s.endedAt)) + '</div>';
+      if (s.model) html += '<div><span style="color:var(--ink-muted);">' + t('sessions.labels.model') + ':</span> ' + esc(s.model) + '</div>';
+      if (s.tags && s.tags.length) html += '<div><span style="color:var(--ink-muted);">' + t('sessions.labels.tags') + ':</span> ' + s.tags.map(esc).join(', ') + '</div>';
       html += '</div></div>';
 
       html += '<div style="display:flex;gap:8px;">';
@@ -3873,6 +4067,24 @@
       if (action === 'confirm-delete-memory') {
         var memoryId = target.getAttribute('data-memory-id');
         if (memoryId) confirmDeleteMemory(memoryId);
+        return;
+      }
+      if (action === 'save-viewer-token') {
+        var tokenInput = document.getElementById('viewer-auth-token');
+        var token = tokenInput ? tokenInput.value.trim() : '';
+        if (token) {
+          setViewerToken(token);
+          hideViewerAuthPrompt();
+          // Re-fetch config/flags so the footer version + flag banners
+          // refresh without a full page reload; fetchFlags() only runs
+          // during bootstrap and would otherwise stay stale until the
+          // user reloads.
+          fetchFlags();
+          if (state[state.activeTab] && typeof state[state.activeTab] === 'object') {
+            state[state.activeTab].loaded = false;
+          }
+          loadTab(state.activeTab);
+        }
         return;
       }
       if (action === 'timeline-filter') {

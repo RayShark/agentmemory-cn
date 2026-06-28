@@ -1,5 +1,5 @@
-import type { ISdk, ApiRequest } from "iii-sdk";
-import type { Session, CompressedObservation, HookPayload, CommitLink } from "../types.js";
+import { TriggerAction, type ISdk, type ApiRequest } from "iii-sdk";
+import type { Session, CompressedObservation, HookPayload, CommitLink, SessionSummary } from "../types.js";
 import { withKeyedLock } from "../state/keyed-mutex.js";
 import { KV } from "../state/schema.js";
 import { StateKV } from "../state/kv.js";
@@ -8,9 +8,11 @@ import type { MetricsStore } from "../eval/metrics-store.js";
 import type { ResilientProvider } from "../providers/resilient.js";
 import { VERSION } from "../version.js";
 import { timingSafeCompare } from "../auth.js";
+import { isSlotsEnabled, isReflectEnabled } from "../functions/slots.js";
 import { renderViewerDocument } from "../viewer/document.js";
 import { getBoundViewerPort, getViewerSkipped } from "../viewer/server.js";
 import { MAX_FILES_UPPER_BOUND } from "../functions/replay.js";
+import { logger } from "../logger.js";
 import {
   isGraphExtractionEnabled,
   isConsolidationEnabled,
@@ -23,7 +25,6 @@ import {
   isAgentScopeIsolated,
 } from "../config.js";
 import { t } from "../i18n/index.js";
-import { isSlotsEnabled } from "../functions/slots.js";
 
 type Response = {
   status_code: number;
@@ -124,6 +125,21 @@ function slotsDisabledResponse(): Response {
     error: apiT("featureDisabled.slots.error"),
     flag: "AGENTMEMORY_SLOTS",
     enableHow: apiT("featureDisabled.slots.enableHow"),
+    docsHref: "https://github.com/rohitg00/agentmemory#memory-slots",
+  });
+}
+
+function reflectDisabledResponse(): Response {
+  return flagDisabledResponse({
+    error:
+      getLocale() === "zh-CN"
+        ? "Slot reflection 未启用"
+        : "Slot reflection not enabled",
+    flag: "AGENTMEMORY_REFLECT",
+    enableHow:
+      getLocale() === "zh-CN"
+        ? "设置 AGENTMEMORY_REFLECT=true 并重启。需要 AGENTMEMORY_SLOTS=true。"
+        : "Set AGENTMEMORY_REFLECT=true and restart. Requires AGENTMEMORY_SLOTS=true.",
     docsHref: "https://github.com/rohitg00/agentmemory#memory-slots",
   });
 }
@@ -379,7 +395,7 @@ export function registerApiTriggers(
     },
   });
 
-  sdk.registerFunction("api::search", 
+  sdk.registerFunction("api::search",
     async (
       req: ApiRequest<{
         query: string;
@@ -388,9 +404,16 @@ export function registerApiTriggers(
         cwd?: string;
         format?: string;
         token_budget?: number;
+        agentId?: string;
       }>,
     ): Promise<Response> => {
       const body = (req.body ?? {}) as Record<string, unknown>;
+      const queryAgentId =
+        typeof (req as { query_params?: Record<string, string> })
+          .query_params?.["agentId"] === "string"
+          ? (req as { query_params: Record<string, string> })
+              .query_params["agentId"]
+          : undefined;
       if (typeof body.query !== "string" || !body.query.trim()) {
         return { status_code: 400, body: apiError("queryRequiredNonEmpty") };
       }
@@ -425,6 +448,14 @@ export function registerApiTriggers(
           body: apiError("positiveInteger", { field: "token_budget" }),
         };
       }
+      // #817: propagate agentId so the upstream isolation filter
+      // applies. Honors body.agentId (POST body), ?agentId=... query
+      // param, or implicit fallback to the worker's AGENT_ID when
+      // AGENTMEMORY_AGENT_SCOPE=isolated.
+      const bodyAgentId =
+        typeof body.agentId === "string" && body.agentId.trim().length > 0
+          ? (body.agentId as string).trim()
+          : undefined;
       const payload = {
         query: body.query.trim(),
         limit: body.limit as number | undefined,
@@ -435,6 +466,7 @@ export function registerApiTriggers(
             ? body.format.trim().toLowerCase()
             : undefined,
         token_budget: body.token_budget as number | undefined,
+        agentId: bodyAgentId ?? queryAgentId,
       };
       const result = await sdk.trigger({ function_id: "mem::search", payload: payload });
       return { status_code: 200, body: result };
@@ -631,6 +663,19 @@ export function registerApiTriggers(
         { type: "set", path: "endedAt", value: new Date().toISOString() },
         { type: "set", path: "status", value: "completed" },
       ]);
+      // Fan out session-stopped lifecycle (non-blocking).
+      try {
+        sdk.trigger({
+          function_id: "event::session::stopped",
+          payload: { sessionId },
+          action: TriggerAction.Void(),
+        });
+      } catch (err) {
+        logger.warn("event::session::stopped trigger failed", {
+          sessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       return { status_code: 200, body: { success: true } };
     },
   );
@@ -814,7 +859,15 @@ export function registerApiTriggers(
       const filtered = filterAgentId
         ? sessions.filter((s) => s.agentId === filterAgentId)
         : sessions;
-      return { status_code: 200, body: { sessions: filtered } };
+      const summaries = await Promise.all(
+        filtered.map((s) =>
+          kv.get<SessionSummary>(KV.summaries, s.id).catch(() => null),
+        ),
+      );
+      const withSummary = filtered.map((s, i) =>
+        summaries[i] ? { ...s, summary: summaries[i] } : s,
+      );
+      return { status_code: 200, body: { sessions: withSummary } };
     },
   );
   sdk.registerTrigger({
@@ -872,13 +925,14 @@ export function registerApiTriggers(
     config: { api_path: "/agentmemory/file-context", http_method: "POST" },
   });
 
-  sdk.registerFunction("api::enrich", 
+  sdk.registerFunction("api::enrich",
     async (
       req: ApiRequest<{
         sessionId: string;
         files: string[];
         terms?: string[];
         toolName?: string;
+        project?: string;
       }>,
     ): Promise<Response> => {
       const authErr = checkAuth(req, secret);
@@ -908,7 +962,25 @@ export function registerApiTriggers(
           body: apiError("fieldStringArray", { field: "terms" }),
         };
       }
-      const result = await sdk.trigger({ function_id: "mem::enrich", payload: req.body });
+      if (
+        req.body.project !== undefined &&
+        (typeof req.body.project !== "string" || !req.body.project.trim())
+      ) {
+        return {
+          status_code: 400,
+          body: apiFieldNonEmptyString("project"),
+        };
+      }
+      const result = await sdk.trigger({
+        function_id: "mem::enrich",
+        payload: {
+          sessionId: req.body.sessionId,
+          files: req.body.files,
+          ...(req.body.terms !== undefined && { terms: req.body.terms }),
+          ...(req.body.toolName !== undefined && { toolName: req.body.toolName }),
+          ...(req.body.project !== undefined && { project: req.body.project }),
+        },
+      });
       return { status_code: 200, body: result };
     },
   );
@@ -918,13 +990,16 @@ export function registerApiTriggers(
     config: { api_path: "/agentmemory/enrich", http_method: "POST" },
   });
 
-  sdk.registerFunction("api::remember", 
+  sdk.registerFunction("api::remember",
     async (
       req: ApiRequest<{
         content: string;
         type?: string;
         concepts?: string[];
         files?: string[];
+        ttlDays?: number;
+        sourceObservationIds?: string[];
+        project?: string;
       }>,
     ): Promise<Response> => {
       const authErr = checkAuth(req, secret);
@@ -936,7 +1011,24 @@ export function registerApiTriggers(
       ) {
         return { status_code: 400, body: apiFieldRequired("content") };
       }
-      const result = await sdk.trigger({ function_id: "mem::remember", payload: req.body });
+      if (
+        req.body.project !== undefined &&
+        (typeof req.body.project !== "string" || !req.body.project.trim())
+      ) {
+        return { status_code: 400, body: apiFieldNonEmptyString("project") };
+      }
+      const result = await sdk.trigger({
+        function_id: "mem::remember",
+        payload: {
+          content: req.body.content,
+          ...(req.body.type !== undefined && { type: req.body.type }),
+          ...(req.body.concepts !== undefined && { concepts: req.body.concepts }),
+          ...(req.body.files !== undefined && { files: req.body.files }),
+          ...(req.body.ttlDays !== undefined && { ttlDays: req.body.ttlDays }),
+          ...(req.body.sourceObservationIds !== undefined && { sourceObservationIds: req.body.sourceObservationIds }),
+          ...(req.body.project !== undefined && { project: req.body.project }),
+        },
+      });
       return { status_code: 201, body: result };
     },
   );
@@ -1016,14 +1108,32 @@ export function registerApiTriggers(
     config: { api_path: "/agentmemory/generate-rules", http_method: "POST" },
   });
 
-  sdk.registerFunction("api::migrate", 
-    async (req: ApiRequest<{ dbPath: string }>): Promise<Response> => {
+  sdk.registerFunction("api::migrate",
+    async (
+      req: ApiRequest<{ dbPath?: string; step?: string; dryRun?: boolean }>,
+    ): Promise<Response> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
-      if (!req.body?.dbPath || typeof req.body.dbPath !== "string") {
-        return { status_code: 400, body: apiFieldRequired("dbPath") };
+      const hasStep =
+        typeof req.body?.step === "string" && req.body.step.trim().length > 0;
+      const hasDbPath =
+        typeof req.body?.dbPath === "string" && req.body.dbPath.trim().length > 0;
+      if (!hasStep && !hasDbPath) {
+        return {
+          status_code: 400,
+          body: apiError("oneOfRequired", {
+            fields: "step (string) or dbPath (string)",
+          }),
+        };
       }
-      const result = await sdk.trigger({ function_id: "mem::migrate", payload: req.body });
+      const result = await sdk.trigger({
+        function_id: "mem::migrate",
+        payload: {
+          ...(req.body.step !== undefined && { step: req.body.step }),
+          ...(req.body.dbPath !== undefined && { dbPath: req.body.dbPath }),
+          ...(req.body.dryRun !== undefined && { dryRun: req.body.dryRun }),
+        },
+      });
       return { status_code: 200, body: result };
     },
   );
@@ -1049,9 +1159,18 @@ export function registerApiTriggers(
     config: { api_path: "/agentmemory/evict", http_method: "POST" },
   });
 
-  sdk.registerFunction("api::smart-search", 
+  sdk.registerFunction("api::smart-search",
     async (
-      req: ApiRequest<{ query?: string; expandIds?: string[]; limit?: number }>,
+      req: ApiRequest<{
+        query?: string;
+        expandIds?: Array<string | { obsId: string; sessionId: string }>;
+        limit?: number;
+        project?: string;
+        includeLessons?: boolean;
+        agentId?: string;
+        sessionId?: string;
+        source?: string;
+      }>,
     ): Promise<Response> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
@@ -1064,7 +1183,27 @@ export function registerApiTriggers(
           body: apiError("queryOrExpandIdsRequired"),
         };
       }
-      const result = await sdk.trigger({ function_id: "mem::smart-search", payload: req.body });
+      // #771: route the X-Agentmemory-Source header into the payload so
+      // the followup-rate diagnostic can skip viewer-originated calls.
+      // Body wins if both are set (advanced callers explicitly override).
+      const headers = (req.headers || {}) as Record<string, string | string[] | undefined>;
+      const sourceHeader = headers["x-agentmemory-source"] ?? headers["X-Agentmemory-Source"];
+      const sourceFromHeader = Array.isArray(sourceHeader) ? sourceHeader[0] : sourceHeader;
+      // Whitelist payload fields explicitly — REST endpoints never pass
+      // the raw request body through to sdk.trigger (AGENTS.md security
+      // section). Drops unknown fields so a misbehaving client can't
+      // inject downstream-only options.
+      const payload = {
+        query: req.body?.query,
+        expandIds: req.body?.expandIds,
+        limit: req.body?.limit,
+        project: req.body?.project,
+        includeLessons: req.body?.includeLessons,
+        agentId: req.body?.agentId,
+        sessionId: req.body?.sessionId,
+        source: req.body?.source ?? sourceFromHeader,
+      };
+      const result = await sdk.trigger({ function_id: "mem::smart-search", payload });
       return { status_code: 200, body: result };
     },
   );
@@ -1072,6 +1211,38 @@ export function registerApiTriggers(
     type: "http",
     function_id: "api::smart-search",
     config: { api_path: "/agentmemory/smart-search", http_method: "POST" },
+  });
+
+  // #771: read-back endpoint for the followup-rate diagnostic. Returns
+  // a directional signal — overcounts on legitimate query refinement —
+  // so help text + the CLI status line carry the same caveat.
+  sdk.registerFunction("api::diagnostic-followup",
+    async (req: ApiRequest): Promise<Response> => {
+      const authErr = checkAuth(req, secret);
+      if (authErr) return authErr;
+      const result = await sdk.trigger({
+        function_id: "mem::diagnostic::followup-stats",
+        payload: {},
+      });
+      return {
+        status_code: 200,
+        body: {
+          ...(result as Record<string, unknown>),
+          caveat:
+            "Directional signal: overcounts on legitimate query refinement. " +
+            "Tune via AGENTMEMORY_FOLLOWUP_WINDOW_SECONDS.",
+        },
+      };
+    },
+  );
+  sdk.registerTrigger({
+    type: "http",
+    function_id: "api::diagnostic-followup",
+    config: {
+      api_path: "/agentmemory/diagnostics/followup",
+      http_method: "GET",
+      middleware_function_ids: ["middleware::api-auth"],
+    },
   });
 
   sdk.registerFunction("api::timeline", 
@@ -1291,19 +1462,31 @@ export function registerApiTriggers(
     },
   });
 
-  sdk.registerFunction("api::graph-query", 
+  sdk.registerFunction("api::graph-query",
     async (
       req: ApiRequest<{
         startNodeId?: string;
         nodeType?: string;
         maxDepth?: number;
         query?: string;
+        limit?: number;
+        offset?: number;
       }>,
     ): Promise<Response> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
+      // Whitelist payload fields explicitly; AGENTS.md security rule:
+      // REST endpoints never pass raw req.body through to sdk.trigger.
+      const payload = {
+        startNodeId: req.body?.startNodeId,
+        nodeType: req.body?.nodeType,
+        maxDepth: req.body?.maxDepth,
+        query: req.body?.query,
+        limit: req.body?.limit,
+        offset: req.body?.offset,
+      };
       try {
-        const result = await sdk.trigger({ function_id: "mem::graph-query", payload: req.body || {} });
+        const result = await sdk.trigger({ function_id: "mem::graph-query", payload });
         return { status_code: 200, body: result };
       } catch {
         return graphDisabledResponse();
@@ -1334,7 +1517,58 @@ export function registerApiTriggers(
     config: { api_path: "/agentmemory/graph/stats", http_method: "GET" },
   });
 
-  sdk.registerFunction("api::graph-extract", 
+  // #814: explicit snapshot rebuild endpoint. Pays the full graph
+  // enumeration once and persists a top-degree subgraph + aggregate
+  // counts so subsequent /graph/query and /graph/stats calls skip the
+  // unbounded kv.list. Operator-grade endpoint exposed for the viewer
+  // banner action and CLI repair.
+  sdk.registerFunction("api::graph-snapshot-rebuild",
+    async (req: ApiRequest): Promise<Response> => {
+      const authErr = checkAuth(req, secret);
+      if (authErr) return authErr;
+      try {
+        const result = await sdk.trigger({
+          function_id: "mem::graph-snapshot-rebuild",
+          payload: {},
+        });
+        return { status_code: 200, body: result };
+      } catch {
+        return graphDisabledResponse();
+      }
+    },
+  );
+  sdk.registerTrigger({
+    type: "http",
+    function_id: "api::graph-snapshot-rebuild",
+    config: { api_path: "/agentmemory/graph/snapshot-rebuild", http_method: "POST" },
+  });
+
+  // #814 v2: clean-restart endpoint for legacy corpora too large for
+  // safe rebuild. Wipes graph state without touching observations, so
+  // recall + history stay intact while the graph rebuilds incrementally
+  // from new extracts (or a one-shot /graph/build replay).
+  sdk.registerFunction("api::graph-reset",
+    async (req: ApiRequest): Promise<Response> => {
+      const authErr = checkAuth(req, secret);
+      if (authErr) return authErr;
+      try {
+        const result = await sdk.trigger({
+          function_id: "mem::graph-reset",
+          payload: {},
+        });
+        return { status_code: 200, body: result };
+      } catch {
+        return graphDisabledResponse();
+      }
+    },
+  );
+  sdk.registerTrigger({
+    type: "http",
+    function_id: "api::graph-reset",
+    config: { api_path: "/agentmemory/graph/reset", http_method: "POST" },
+  });
+
+  sdk.registerFunction("api::graph-extract",
     async (req: ApiRequest<{ observations: unknown[] }>): Promise<Response> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
@@ -1361,7 +1595,72 @@ export function registerApiTriggers(
     config: { api_path: "/agentmemory/graph/extract", http_method: "POST" },
   });
 
-  sdk.registerFunction("api::consolidate-pipeline", 
+  // Backfill the knowledge graph from existing compressed observations.
+  // Viewer calls this when the graph is empty (#666). Iterates every
+  // session, collects observations that have a `title` (compressed only),
+  // and feeds them through `mem::graph-extract` in batches.
+  sdk.registerFunction("api::graph-build",
+    async (req: ApiRequest<{ batchSize?: number }>): Promise<Response> => {
+      const authErr = checkAuth(req, secret);
+      if (authErr) return authErr;
+      const batchSize = Math.max(
+        1,
+        Math.min(100, Number((req.body as { batchSize?: number })?.batchSize) || 25),
+      );
+      try {
+        const sessions = await kv.list<Session>(KV.sessions);
+        let totalNodes = 0;
+        let totalEdges = 0;
+        let batchesRun = 0;
+        for (const session of sessions) {
+          const sid = session?.id;
+          if (typeof sid !== "string" || sid.length === 0) continue;
+          const observations = await kv.list<CompressedObservation>(KV.observations(sid));
+          const compressed = observations.filter((o) => o && typeof o.title === "string" && o.title.length > 0);
+          if (compressed.length === 0) continue;
+          for (let i = 0; i < compressed.length; i += batchSize) {
+            const batch = compressed.slice(i, i + batchSize);
+            try {
+              const result = (await sdk.trigger({
+                function_id: "mem::graph-extract",
+                payload: { observations: batch },
+              })) as { success?: boolean; nodesAdded?: number; edgesAdded?: number };
+              if (result?.success) {
+                totalNodes += Number(result.nodesAdded) || 0;
+                totalEdges += Number(result.edgesAdded) || 0;
+              }
+              batchesRun++;
+            } catch (err) {
+              logger.warn("graph-build batch failed", {
+                sessionId: sid,
+                batchIndex: Math.floor(i / batchSize),
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        }
+        return {
+          status_code: 200,
+          body: {
+            success: true,
+            sessions: sessions.length,
+            batches: batchesRun,
+            nodes: totalNodes,
+            edges: totalEdges,
+          },
+        };
+      } catch {
+        return graphDisabledResponse();
+      }
+    },
+  );
+  sdk.registerTrigger({
+    type: "http",
+    function_id: "api::graph-build",
+    config: { api_path: "/agentmemory/graph/build", http_method: "POST" },
+  });
+
+  sdk.registerFunction("api::consolidate-pipeline",
     async (req: ApiRequest<{ tier?: string }>): Promise<Response> => {
       const authErr = checkAuth(req, secret);
       if (authErr) return authErr;
@@ -1942,6 +2241,7 @@ export function registerApiTriggers(
     const authErr = checkAuth(req, secret);
     if (authErr) return authErr;
     if (!isSlotsEnabled()) return slotsDisabledResponse();
+    if (!isReflectEnabled()) return reflectDisabledResponse();
     const body = (req.body ?? {}) as Record<string, unknown>;
     const sessionId = asNonEmptyString(body["sessionId"]);
     if (!sessionId) return { status_code: 400, body: apiFieldRequired("sessionId") };

@@ -287,7 +287,7 @@
   "dashboard": {
     "loading": "正在加载仪表盘...",
     "loadFailed": "仪表盘加载失败: {{message}}",
-    "loadFailedHint": "请查看浏览器控制台里的完整错误。如果看到 CSP 违规，请带上 agentmemory 版本和违规文本提交 issue。",
+    "loadFailedHint": "请查看浏览器控制台里的完整错误。如果看到 CSP 违规，请带上 agentmemory 版本和违规文本提交问题。",
     "firstRunKicker": "首次运行 -> 10 秒看到效果",
     "firstRunTitle": "写入示例数据并验证语义召回",
     "firstRunBody": "agentmemory 正在运行，但还没有捕获到任何会话。在另一个终端运行 demo 命令：它会写入 3 个真实感编码会话，并证明混合搜索能找出关键词搜索会漏掉的语义相关记忆。",

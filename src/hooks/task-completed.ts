@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { loadHookEnv } from "./env.js";
 import { resolveProject } from "./project.js";
 
@@ -35,9 +34,15 @@ async function main() {
 
   if (isSdkChildContext(data)) return;
 
+  const rawSessionId = data.session_id ?? data.sessionId;
   const sessionId =
-    (data.session_id as string) || (data.sessionId as string) || "unknown";
-  const cwd = (data.cwd as string) || process.cwd();
+    typeof rawSessionId === "string" && rawSessionId.length > 0
+      ? rawSessionId
+      : "unknown";
+  const cwd =
+    typeof data.cwd === "string" && data.cwd.length > 0
+      ? data.cwd
+      : process.cwd();
 
   fetch(`${REST_URL}/agentmemory/observe`, {
     method: "POST",

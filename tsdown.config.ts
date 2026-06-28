@@ -63,20 +63,22 @@ export default defineConfig([
     clean: false,
     sourcemap: false,
   },
-  {
-    entry: hookEntries,
+  // One entry per config block prevents tsdown from hoisting shared
+  // helpers into hashed chunks across hooks.
+  ...hookEntries.map((entry) => ({
+    entry: [entry],
     outDir: "dist/hooks",
     ...shared,
     splitting: false,
     clean: false,
     sourcemap: false,
-  },
-  {
-    entry: hookEntries,
+  })),
+  ...hookEntries.map((entry) => ({
+    entry: [entry],
     outDir: "plugin/scripts",
     ...shared,
     splitting: false,
     clean: false,
     sourcemap: false,
-  },
+  })),
 ]);

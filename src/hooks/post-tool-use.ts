@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { loadHookEnv } from "./env.js";
 import { resolveProject } from "./project.js";
 
@@ -35,14 +34,20 @@ async function main() {
 
   if (isSdkChildContext(data)) return;
 
+  const rawSessionId = data.session_id ?? data.sessionId;
   const sessionId =
-    (data.session_id as string) || (data.sessionId as string) || "unknown";
+    typeof rawSessionId === "string" && rawSessionId.length > 0
+      ? rawSessionId
+      : "unknown";
   const toolName = data.tool_name ?? data.toolName;
   const toolInput = data.tool_input ?? data.toolArgs;
 
   const { imageData, cleanOutput } = extractImageData(toolOutput(data));
 
-  const cwd = (data.cwd as string) || process.cwd();
+  const cwd =
+    typeof data.cwd === "string" && data.cwd.length > 0
+      ? data.cwd
+      : process.cwd();
   fetch(`${REST_URL}/agentmemory/observe`, {
     method: "POST",
     headers: authHeaders(),

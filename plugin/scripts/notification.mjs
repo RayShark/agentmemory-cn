@@ -1,7 +1,56 @@
 #!/usr/bin/env node
-import { loadHookEnv } from "./env.mjs";
-import { resolveProject } from "./project.mjs";
+import { execSync } from "node:child_process";
+import { basename } from "node:path";
 
+//#region src/hooks/env.ts
+function loadHookEnv() {
+	if (process.env["AGENTMEMORY_LOAD_ENV"] === "false") return;
+	const home = process.env["HOME"];
+	if (!home) return;
+	try {
+		process.loadEnvFile(`${home}/.agentmemory/.env`);
+	} catch {}
+}
+
+//#endregion
+//#region src/hooks/project.ts
+function resolveProject(cwd) {
+	const explicit = process.env["AGENTMEMORY_PROJECT_NAME"];
+	if (explicit && explicit.trim()) return explicit.trim();
+	const dir = typeof cwd === "string" && cwd.trim() ? cwd : process.cwd();
+	try {
+		const top = execSync("git rev-parse --show-toplevel", {
+			cwd: dir,
+			stdio: [
+				"ignore",
+				"pipe",
+				"ignore"
+			],
+			timeout: 500
+		}).toString().trim();
+		if (top) return gitCommonDirBasename(dir) ?? basename(top);
+	} catch {}
+	return basename(dir);
+}
+function gitCommonDirBasename(cwd) {
+	try {
+		const commonDir = execSync("git rev-parse --git-common-dir", {
+			cwd,
+			stdio: [
+				"ignore",
+				"pipe",
+				"ignore"
+			],
+			timeout: 500
+		}).toString().trim();
+		if (!commonDir) return null;
+		return basename(commonDir.replace(/\/\.git$/, ""));
+	} catch {
+		return null;
+	}
+}
+
+//#endregion
 //#region src/hooks/notification.ts
 loadHookEnv();
 function isSdkChildContext(payload) {
@@ -28,8 +77,9 @@ async function main() {
 	if (isSdkChildContext(data)) return;
 	const notificationType = data.notification_type ?? data.notificationType;
 	if (notificationType !== "permission_prompt") return;
-	const sessionId = data.session_id || data.sessionId || "unknown";
-	const cwd = data.cwd || process.cwd();
+	const rawSessionId = data.session_id ?? data.sessionId;
+	const sessionId = typeof rawSessionId === "string" && rawSessionId.length > 0 ? rawSessionId : "unknown";
+	const cwd = typeof data.cwd === "string" && data.cwd.length > 0 ? data.cwd : process.cwd();
 	fetch(`${REST_URL}/agentmemory/observe`, {
 		method: "POST",
 		headers: authHeaders(),

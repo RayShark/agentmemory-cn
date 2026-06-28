@@ -1,16 +1,16 @@
 ---
 name: recap
 description: 总结当前项目最近 N 个代理会话，并按日期分组。用于用户要“recap”、“最近都在做什么”、“这周”、“今天”，或想汇总近期工作时。
-argument-hint: "[last N | today | this week]"
+argument-hint: "[最近 N 个 | 今天 | 本周]"
 user-invocable: true
 ---
 
 用户想要一份回顾。时间窗口参数：$ARGUMENTS
 
 解析 `$ARGUMENTS` 来确定窗口：
-- `today` -> 本地当前日期开始的会话
-- `this week` -> 最近 7 天开始的会话
-- `last <n>` -> 最近 N 个会话
+- `today` 或 `今天` -> 本地当前日期开始的会话
+- `this week` 或 `本周` -> 最近 7 天开始的会话
+- `last <n>` 或 `最近 <n>` -> 最近 N 个会话
 - 裸数字 -> 按 `last <n>` 处理
 - 空参数 -> 默认 `last 10`
 

@@ -5,8 +5,12 @@ import type { Locale } from "../../i18n/index.js";
 import type { ConnectAdapter, ConnectOptions, ConnectResult } from "./types.js";
 import { adapter as antigravity } from "./antigravity.js";
 import { adapter as claudeCode } from "./claude-code.js";
+import { adapter as cline } from "./cline.js";
+import { adapter as copilotCli } from "./copilot-cli.js";
 import { adapter as codex } from "./codex.js";
+import { adapter as continueDev } from "./continue.js";
 import { adapter as cursor } from "./cursor.js";
+import { adapter as droid } from "./droid.js";
 import { adapter as geminiCli } from "./gemini-cli.js";
 import { adapter as hermes } from "./hermes.js";
 import { adapter as kiro } from "./kiro.js";
@@ -15,21 +19,31 @@ import { adapter as openclaw } from "./openclaw.js";
 import { adapter as openhuman } from "./openhuman.js";
 import { adapter as pi } from "./pi.js";
 import { adapter as qwen } from "./qwen.js";
+import { adapter as warp } from "./warp.js";
+import { adapter as zed } from "./zed.js";
 
 export const ADAPTERS: readonly ConnectAdapter[] = [
   claudeCode,
+  copilotCli,
   codex,
   cursor,
   geminiCli,
   qwen,
   antigravity,
   kiro,
+  warp,
+  cline,
+  continueDev,
+  zed,
+  droid,
   opencode,
   openclaw,
   hermes,
   pi,
   openhuman,
 ];
+
+export const NATIVE_SKILLS_INSTALL_SUMMARY = "15 skills";
 
 export function resolveAdapter(name: string): ConnectAdapter | null {
   const lower = name.toLowerCase();
@@ -89,14 +103,16 @@ export async function runAdapter(
 
 export async function runConnect(args: string[]): Promise<void> {
   const locale = currentCliLocale();
-  if (platform() === "win32") {
+  const { dryRun, force, all, withHooks, positional } = parseFlags(args);
+  const allowWindowsAdapter =
+    positional.length === 1 && positional[0]?.toLowerCase() === "copilot-cli";
+  if (platform() === "win32" && !allowWindowsAdapter) {
     p.intro(cliTFor(locale, "connect.intro"));
     p.log.warn(cliTFor(locale, "connect.windowsUnsupported"));
     p.outro(cliTFor(locale, "connect.windowsOutro"));
     return;
   }
 
-  const { dryRun, force, all, withHooks, positional } = parseFlags(args);
   const opts: ConnectOptions = {
     dryRun,
     force,
@@ -199,5 +215,6 @@ function summarize(
   if (stubs.length > 0) {
     p.log.info(cliTFor(locale, "connect.manualCount", { count: stubs.length }));
   }
+
   p.outro(cliTFor(locale, "connect.restartOutro"));
 }

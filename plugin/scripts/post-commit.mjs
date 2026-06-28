@@ -1,8 +1,18 @@
 #!/usr/bin/env node
-import { loadHookEnv } from "./env.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+//#region src/hooks/env.ts
+function loadHookEnv() {
+	if (process.env["AGENTMEMORY_LOAD_ENV"] === "false") return;
+	const home = process.env["HOME"];
+	if (!home) return;
+	try {
+		process.loadEnvFile(`${home}/.agentmemory/.env`);
+	} catch {}
+}
+
+//#endregion
 //#region src/hooks/post-commit.ts
 const exec = promisify(execFile);
 loadHookEnv();

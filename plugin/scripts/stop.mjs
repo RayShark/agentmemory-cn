@@ -1,6 +1,15 @@
 #!/usr/bin/env node
-import { loadHookEnv } from "./env.mjs";
+//#region src/hooks/env.ts
+function loadHookEnv() {
+	if (process.env["AGENTMEMORY_LOAD_ENV"] === "false") return;
+	const home = process.env["HOME"];
+	if (!home) return;
+	try {
+		process.loadEnvFile(`${home}/.agentmemory/.env`);
+	} catch {}
+}
 
+//#endregion
 //#region src/hooks/stop.ts
 loadHookEnv();
 function isSdkChildContext(payload) {
@@ -25,7 +34,8 @@ async function main() {
 		return;
 	}
 	if (isSdkChildContext(data)) return;
-	const sessionId = data.session_id || data.sessionId || "unknown";
+	const rawSessionId = data.session_id ?? data.sessionId;
+	const sessionId = typeof rawSessionId === "string" && rawSessionId.length > 0 ? rawSessionId : "unknown";
 	fetch(`${REST_URL}/agentmemory/summarize`, {
 		method: "POST",
 		headers: authHeaders(),

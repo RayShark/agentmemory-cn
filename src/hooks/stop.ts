@@ -41,8 +41,11 @@ async function main() {
     return;
   }
 
+  const rawSessionId = data.session_id ?? data.sessionId;
   const sessionId =
-    (data.session_id as string) || (data.sessionId as string) || "unknown";
+    typeof rawSessionId === "string" && rawSessionId.length > 0
+      ? rawSessionId
+      : "unknown";
 
   fetch(`${REST_URL}/agentmemory/summarize`, {
     method: "POST",

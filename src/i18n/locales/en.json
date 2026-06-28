@@ -96,6 +96,9 @@
       "startWith": "Start with: npx @agentmemory/agentmemory",
       "nothingChanged": "Nothing changed."
     },
+    "tools": {
+      "unknownValue": "Unknown --tools value \"{{value}}\" (valid: all, core); falling back to all."
+    },
     "globalInstall": {
       "prompt": "Install agentmemory globally so the bare `agentmemory` command works in any shell? [Y/n]",
       "skipped": "Skipped. Re-run via `npx @agentmemory/agentmemory` or install later with: npm install -g @agentmemory/agentmemory",
@@ -512,7 +515,8 @@
           "content": "The insight or decision to remember",
           "type": "Memory type: pattern, preference, architecture, bug, workflow, or fact",
           "concepts": "Comma-separated key concepts",
-          "files": "Comma-separated relevant file paths"
+          "files": "Comma-separated relevant file paths",
+          "project": "Stable canonical project identifier this memory belongs to (for example a slug, UUID, or registry key). Must match the value used when the session started."
         }
       }
     }

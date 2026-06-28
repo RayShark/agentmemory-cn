@@ -95,6 +95,9 @@
       "startWith": "启动命令: npx @agentmemory/agentmemory",
       "nothingChanged": "没有变更。"
     },
+    "tools": {
+      "unknownValue": "未知 --tools 值 \"{{value}}\"（有效值: all、core）；将回退为 all。"
+    },
     "globalInstall": {
       "prompt": "安装全局 agentmemory，让裸 `agentmemory` 命令在任意 shell 中可用？[Y/n]",
       "skipped": "已跳过。可继续通过 `npx @agentmemory/agentmemory` 运行，或稍后手动安装: npm install -g @agentmemory/agentmemory",
@@ -508,7 +511,7 @@
         "cursor": "使用 MCP（Cursor 唯一支持的协议）。记忆桥接仍在底层 :3111 运行。",
         "gemini-cli": "使用 MCP（Gemini CLI 唯一支持的协议）。记忆桥接仍在底层 :3111 运行。",
         "qwen": "通过 ~/.qwen/settings.json 使用 MCP。Qwen Code 的钩子系统也可以单独接入 - 查看文档。",
-        "antigravity": "通过 mcp_config.json 使用 MCP。Antigravity 将替代 Gemini CLI（sunset 2026-06-18）。",
+        "antigravity": "通过 mcp_config.json 使用 MCP。Antigravity 将在 2026-06-18 替代 Gemini CLI。",
         "kiro": "通过 ~/.kiro/settings/mcp.json 使用 MCP（用户级）。工作区覆盖位于 .kiro/settings/mcp.json。",
         "opencode": "使用 OpenCode 顶层 MCP 配置，以及内置 agentmemory 插件和斜杠命令。",
         "openclaw": "使用 MCP。钩子也可用 - 查看 docs/openclaw.md。",
@@ -524,23 +527,23 @@
       "opencode": {
         "dryRunMergeConfig": "[dry-run] 将合并 {{path}} 中的 OpenCode MCP/plugin 配置",
         "dryRunCreateConfig": "[dry-run] 将创建 {{path}} 中的 OpenCode MCP/plugin 配置",
-        "dryRunCopyCommands": "[dry-run] 将从 {{path}} 复制 {{language}} OpenCode commands",
-        "verificationFailed": "验证失败: 写入后 {{path}} 中没有 OpenCode agentmemory MCP/plugin entries。",
-        "pluginExists": "OpenCode plugin file 已存在于 {{path}}；使用 --force 可覆盖。",
-        "commandExists": "OpenCode command {{name}} 已存在于 {{path}}；使用 --force 可覆盖。"
+        "dryRunCopyCommands": "[dry-run] 将从 {{path}} 复制 {{language}} OpenCode 命令",
+        "verificationFailed": "验证失败: 写入后 {{path}} 中没有 OpenCode agentmemory MCP/插件条目。",
+        "pluginExists": "OpenCode 插件文件已存在于 {{path}}；使用 --force 可覆盖。",
+        "commandExists": "OpenCode 命令 {{name}} 已存在于 {{path}}；使用 --force 可覆盖。"
       },
       "hermes": {
-        "warn": "Hermes 使用 YAML config。自动 merge 尚未实现 - 需要手动安装。",
+        "warn": "Hermes 使用 YAML 配置。自动合并尚未实现 - 需要手动安装。",
         "title": "Hermes 手动安装",
         "note": "添加到 {{config}}:\n\n  mcp_servers:\n    agentmemory:\n      command: npx\n      args: [\"-y\", \"@agentmemory/mcp\"]\n\n  memory:\n    provider: agentmemory\n\n完整指南: {{docs}}"
       },
       "openhuman": {
         "warn": "OpenHuman 集成尚未自动化。当前 agentmemory repo 中还没有 `integrations/openhuman/` 目录。",
         "title": "OpenHuman 手动安装",
-        "note": "OpenHuman 是 Memory-trait host。预期接入方式是使用 http://localhost:3111 的 REST proxy，加上 OpenHuman 侧的 Memory trait impl。等 integrations/openhuman/ 进入 agentmemory 后会自动接入。\n\nTracking: {{docs}}"
+        "note": "OpenHuman 是 Memory trait 宿主。预期接入方式是使用 http://localhost:3111 的 REST 代理，加上 OpenHuman 侧的 Memory trait 实现。等 integrations/openhuman/ 进入 agentmemory 后会自动接入。\n\n跟踪链接: {{docs}}"
       },
       "pi": {
-        "warn": "pi 使用 TypeScript extension file。自动复制和注册尚未实现 - 需要手动安装。",
+        "warn": "pi 使用 TypeScript 扩展文件。自动复制和注册尚未实现 - 需要手动安装。",
         "title": "pi 手动安装",
         "note": "在 agentmemory repo root 中运行:\n\n  mkdir -p {{extDir}}\n  cp integrations/pi/index.ts {{extDir}}/index.ts\n  cp integrations/pi/security.ts {{extDir}}/security.ts\n\n然后添加到 ~/.pi/agent/settings.json:\n  { \"extensions\": [\"~/.pi/agent/extensions/agentmemory\"] }\n\n完整指南: {{docs}}"
       }
@@ -550,7 +553,7 @@
     "tools": {
       "memory_recall": {"description":"搜索过去会话观察，找回相关上下文、历史决策或某个文件此前如何修改。","properties":{"query":"搜索查询（关键词、文件名、概念）","limit":"返回结果上限（默认 10）","format":"结果格式：full、compact 或 narrative（默认 full）","token_budget":"可选 token 预算，用于裁剪返回结果"}},
       "memory_compress_file": {"description":"压缩 Markdown 文件以降低 token 用量，同时保留标题、URL 和代码块。写入前会创建 .original.md 备份。","properties":{"filePath":"要压缩的 Markdown 文件路径"}},
-      "memory_save": {"description":"显式保存重要洞察、决策或模式到长期记忆。","properties":{"content":"要保存的洞察或决策","type":"记忆类型：pattern、preference、architecture、bug、workflow 或 fact","concepts":"逗号分隔的关键概念","files":"逗号分隔的相关文件路径"}},
+      "memory_save": {"description":"显式保存重要洞察、决策或模式到长期记忆。","properties":{"content":"要保存的洞察或决策","type":"记忆类型：pattern、preference、architecture、bug、workflow 或 fact","concepts":"逗号分隔的关键概念","files":"逗号分隔的相关文件路径","project":"这条记忆所属的稳定规范项目标识（例如 slug、UUID 或 registry key）。必须与会话启动时使用的值一致。"}},
       "memory_file_history": {"description":"获取指定文件的历史观察。","properties":{"files":"逗号分隔的文件路径","sessionId":"要排除的当前 session ID"}},
       "memory_patterns": {"description":"检测跨会话反复出现的模式。","properties":{"project":"要分析的项目路径"}},
       "memory_sessions": {"description":"列出最近会话及其状态和观察数量。","properties":{}},
@@ -570,18 +573,18 @@
       "memory_audit": {"description":"查看记忆操作的审计轨迹。","properties":{"operation":"按操作类型过滤","limit":"返回条目上限（默认 50）"}},
       "memory_governance_delete": {"description":"删除指定记忆并保留审计记录。","properties":{"memoryIds":"逗号分隔的待删除记忆 ID","reason":"删除原因"}},
       "memory_snapshot_create": {"description":"创建当前记忆状态的 git-versioned snapshot。","properties":{"message":"snapshot 描述"}},
-      "memory_action_create": {"description":"创建带类型化依赖的 actionable work item。Actions 记录 agents 需要做什么，以及 work items 如何相互关联。","properties":{"title":"Action 标题","description":"工作的详细描述","priority":"优先级 1-10（10 最高）","project":"项目路径","tags":"逗号分隔的标签","parentId":"分层 actions 的 parent action ID","requires":"逗号分隔的前置 action IDs"}},
+      "memory_action_create": {"description":"创建带类型化依赖的可执行工作项。Actions 记录 agents 需要做什么，以及 work items 如何相互关联。","properties":{"title":"Action 标题","description":"工作的详细描述","priority":"优先级 1-10（10 最高）","project":"项目路径","tags":"逗号分隔的标签","parentId":"分层 actions 的 parent action ID","requires":"逗号分隔的前置 action IDs"}},
       "memory_action_update": {"description":"更新 action 的 status、priority 或 details。将 status 设为 'done' 会完成它并解除依赖 action 的阻塞。","properties":{"actionId":"要更新的 action ID","status":"新 status：pending、active、done、blocked、cancelled","result":"结果描述（完成时）","priority":"新优先级 1-10"}},
       "memory_frontier": {"description":"获取所有未阻塞 actions，按 priority 和 urgency 排序。返回没有未满足 dependencies 的 actionable work frontier。","properties":{"project":"按 project 过滤","agentId":"用于检查 lease conflicts 的 agent ID","limit":"返回结果上限（默认 20）"}},
-      "memory_next": {"description":"获取最重要的下一个 action。结合 dependency resolution、priority 和 recency 计算得分。","properties":{"project":"按 project 过滤","agentId":"当前 agent ID"}},
+      "memory_next": {"description":"获取最重要的下一个 action。结合依赖解析、priority 和 recency 计算得分。","properties":{"project":"按 project 过滤","agentId":"当前 agent ID"}},
       "memory_lease": {"description":"获取、释放或续约 action 上的独占 lease，避免多个 agents 同时处理同一事项。","properties":{"actionId":"Action ID（任务 ID）","agentId":"认领该 action 的 agent","operation":"acquire、release 或 renew","result":"释放时的结果（将 action 标记为 done）","ttlMs":"Lease 时长，单位 ms（默认 10min，最大 1hr）"}},
       "memory_routine_run": {"description":"实例化冻结的 workflow routine，为每个步骤创建带正确 dependencies 的 actions。","properties":{"routineId":"Routine template ID（流程模板 ID）","project":"项目上下文","initiatedBy":"启动 run 的 agent"}},
-      "memory_signal_send": {"description":"向另一个 agent 发送消息或广播。支持 threading、typed messages 和 TTL expiration。","properties":{"from":"发送方 agent ID","to":"接收方 agent ID（省略则 broadcast）","content":"消息内容","type":"消息类型：info、request、response、alert、handoff","replyTo":"要回复的 signal ID（自动 threading）"}},
+      "memory_signal_send": {"description":"向另一个 agent 发送消息或广播。支持会话串联、类型化消息和 TTL 过期。","properties":{"from":"发送方 agent ID","to":"接收方 agent ID（省略则 broadcast）","content":"消息内容","type":"消息类型：info、request、response、alert、handoff","replyTo":"要回复的 signal ID（自动 threading）"}},
       "memory_signal_read": {"description":"读取某个 agent 的消息，并将已投递消息标记为已读。","properties":{"agentId":"要读取消息的 agent","unreadOnly":"设为 'true' 仅返回 unread","threadId":"按 conversation thread 过滤","limit":"消息上限（默认 50）"}},
-      "memory_checkpoint": {"description":"创建或解析外部 checkpoint（CI result、approval、deploy status），用于 gate action progress。","properties":{"operation":"create、resolve 或 list","name":"Checkpoint name（用于 create）","checkpointId":"Checkpoint ID（用于 resolve）","status":"passed 或 failed（用于 resolve）","type":"Checkpoint 类型：ci、approval、deploy、external、timer","linkedActionIds":"逗号分隔的 action IDs，此 checkpoint 会 gate 这些 actions（用于 create）"}},
+      "memory_checkpoint": {"description":"创建或解析外部 checkpoint（CI result、approval、deploy status），用于门控任务进展。","properties":{"operation":"create、resolve 或 list","name":"Checkpoint name（用于 create）","checkpointId":"Checkpoint ID（用于 resolve）","status":"passed 或 failed（用于 resolve）","type":"Checkpoint 类型：ci、approval、deploy、external、timer","linkedActionIds":"逗号分隔的 action IDs，此 checkpoint 会 gate 这些 actions（用于 create）"}},
       "memory_mesh_sync": {"description":"与对等 agentmemory 实例同步记忆和任务，用于多代理协作。","properties":{"peerId":"指定 peer ID（省略则所有 peers）","direction":"push、pull 或 both（默认 both）"}},
       "memory_sentinel_create": {"description":"创建事件驱动哨兵，监视条件（webhook、timer、threshold、pattern、approval），触发后自动解除被门控任务的阻塞。","properties":{"name":"哨兵名称","type":"类型：webhook、timer、threshold、pattern、approval、custom","config":"JSON 配置：timer: {durationMs}、threshold: {metric,operator,value}、pattern: {pattern}、webhook: {path}","linkedActionIds":"逗号分隔的要 gate 的 action IDs","expiresInMs":"在指定 ms 后自动过期"}},
-      "memory_sentinel_trigger": {"description":"从外部触发 sentinel，可提供可选 result payload，并解除所有 gated actions 的阻塞。","properties":{"sentinelId":"要触发的 sentinel ID","result":"JSON result payload（结果载荷）"}},
+      "memory_sentinel_trigger": {"description":"从外部触发 sentinel，可提供可选结果载荷，并解除所有 gated actions 的阻塞。","properties":{"sentinelId":"要触发的 sentinel ID","result":"JSON result payload（结果载荷）"}},
       "memory_sketch_create": {"description":"为探索性工作创建临时任务图。TTL 后自动过期，可提升为永久任务或丢弃。","properties":{"title":"Sketch 标题","description":"此 sketch 探索的内容","expiresInMs":"TTL，单位 ms（默认 1 hour）","project":"项目上下文"}},
       "memory_sketch_promote": {"description":"将 sketch 的临时任务提升为永久任务，使探索性工作正式化。","properties":{"sketchId":"要提升的 sketch ID","project":"覆盖 promoted actions 的 project"}},
       "memory_crystallize": {"description":"使用 LLM 汇总将已完成的任务链压缩为紧凑的 crystal 摘要，抽取叙述、关键结果、受影响文件和经验。","properties":{"actionIds":"逗号分隔的待 crystallize 已完成 action IDs","project":"项目上下文","sessionId":"Session 上下文"}},
@@ -600,7 +603,7 @@
       "memory_slot_create": {"description":"创建新槽。如果已有相同 label 的槽则拒绝。","properties":{"label":"Slot label，lowercase，以字母开头，[a-z0-9_]","content":"初始内容（默认空）","sizeLimit":"最大字符数（默认 2000，硬上限 20000）","description":"此槽的用途","pinned":"'false' 表示从 context injection 中排除；默认 true","scope":"'project'（默认）或 'global'（跨 projects 共享）"}},
       "memory_slot_append": {"description":"向现有槽追加文本。如果追加后超过槽的 sizeLimit，则以 413 失败；代理必须先通过 memory_slot_replace 压缩。","properties":{"label":"Slot label（槽标签）","text":"要追加的文本"}},
       "memory_slot_replace": {"description":"原地替换槽内容。如果 content 超过 sizeLimit 则失败。","properties":{"label":"Slot label（槽标签）","content":"新的完整内容"}},
-      "memory_slot_delete": {"description":"删除槽。除非标记为 readOnly，否则 seeded default slots 也可删除。","properties":{"label":"Slot label（槽标签）"}}
+      "memory_slot_delete": {"description":"删除槽。除非标记为 readOnly，否则预置默认槽也可删除。","properties":{"label":"Slot label（槽标签）"}}
     }
   },
   "api": {

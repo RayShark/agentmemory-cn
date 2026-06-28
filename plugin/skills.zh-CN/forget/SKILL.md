@@ -15,7 +15,7 @@ user-invocable: true
 2. 向用户展示找到的内容，包括会话 ID、观察 ID 和标题，并在删除前请求明确确认。
 3. 用户确认后，调用 `memory_governance_delete`：
    - `memoryIds: [<id>, ...]`：步骤 1 返回的 memory ID 数组（或逗号分隔字符串）
-   - `reason: "<简短原因>"`：可选，默认 `"plugin skill request"`
+   - `reason: "<简短原因>"`：可选，默认 `"插件技能请求"`
 
    如果用户要删除整个会话的观察，从搜索结果中收集该会话的每个记忆 ID，并全部传入 `memoryIds`。独立 MCP 不接受裸 `sessionId` 参数；它只能按记忆 ID 删除。
 4. 向用户确认删除数量。

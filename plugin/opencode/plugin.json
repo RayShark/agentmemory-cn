@@ -1,12 +1,12 @@
 {
   "name": "agentmemory-capture",
-  "version": "0.9.20",
+  "version": "1.0.0",
   "description": "agentmemory 的 OpenCode 插件 —— 与 Claude Code 钩子能力对齐：会话生命周期（create/idle/status/compacted/update/diff/delete/error）、消息与提示（chat.message、message.updated 用户+助手、message.removed）、工具生命周期（ToolPart 状态与时序）、片段追踪（subtask、step-finish、reasoning、file、patch、compaction、agent、retry）、文件信息补全流水线、权限、任务跟踪（含优先级）、命令、配置与模型跟踪。22 个钩子，2 个斜杠命令。",
   "author": {
     "name": "Rohit Ghumare",
     "url": "https://github.com/rohitg00"
   },
   "license": "Apache-2.0",
-  "homepage": "https://github.com/rohitg00/agentmemory",
-  "repository": "https://github.com/rohitg00/agentmemory"
+  "homepage": "https://github.com/RayShark/agentmemory-cn",
+  "repository": "https://github.com/RayShark/agentmemory-cn"
 }

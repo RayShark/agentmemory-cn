@@ -163,7 +163,7 @@ describe("Export/Import Functions", () => {
   it("export produces valid ExportData structure", async () => {
     const result = (await sdk.trigger("mem::export", {})) as ExportData;
 
-    expect(result.version).toBe("0.9.22");
+    expect(result.version).toBe("1.0.0");
     expect(result.exportedAt).toBeDefined();
     expect(result.sessions.length).toBe(1);
     expect(result.sessions[0].id).toBe("ses_1");
@@ -277,7 +277,7 @@ describe("Export/Import Functions", () => {
 
   it("import rejects unsupported version", async () => {
     const exportData = {
-      version: "1.0.0",
+      version: "9.9.9",
       exportedAt: new Date().toISOString(),
       sessions: [],
       observations: {},
